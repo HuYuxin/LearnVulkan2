@@ -1,0 +1,4 @@
+.vscode/
+learningNotes.txt
+VulkanBasic
+shaders/*.spv
