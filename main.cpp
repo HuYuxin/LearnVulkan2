@@ -639,6 +639,63 @@ private:
         }
     }
 
+    void createShadowMapRenderPass()
+    {
+        VkAttachmentDescription depthAttachment{};
+        depthAttachment.format = findDepthFormat();
+        depthAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+        depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+        depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        depthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        depthAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        depthAttachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+        VkAttachmentReference depthAttachmentRef{};
+        depthAttachmentRef.attachment = 0;
+        depthAttachmentRef.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+        VkSubpassDescription subpass{};
+        subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+        subpass.colorAttachmentCount = 0;
+        subpass.pColorAttachments = nullptr;
+        subpass.pDepthStencilAttachment = &depthAttachmentRef;
+
+        VkSubpassDependency dependency1{};
+        dependency1.srcSubpass = VK_SUBPASS_EXTERNAL;
+        dependency1.dstSubpass = 0;
+        dependency1.srcStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT;
+        dependency1.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        dependency1.dstStageMask = VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+        dependency1.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+
+        VkSubpassDependency dependency2{};
+        dependency2.srcSubpass = 0;
+        dependency2.dstSubpass = VK_SUBPASS_EXTERNAL;
+        dependency2.srcStageMask = VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+        dependency2.srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+        dependency2.dstStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT;
+        dependency2.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+
+        std::array<VkSubpassDependency, 2> dependencies = {dependency1, dependency2};
+
+        std::array<VkAttachmentDescription, 1> attachments = {depthAttachment};
+        VkRenderPassCreateInfo renderPassInfo{};
+        renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+        renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());;
+        renderPassInfo.pAttachments = attachments.data();
+        renderPassInfo.subpassCount = 1;
+        renderPassInfo.pSubpasses = &subpass;
+        renderPassInfo.dependencyCount = 2;
+        renderPassInfo.pDependencies = dependencies.data();
+
+        if (vkCreateRenderPass(mDevice, &renderPassInfo, nullptr, &mShadowMapRenderPass) != VK_SUCCESS)
+        {
+            throw std::runtime_error("failed to create shadow map render pass!");
+        }
+
+    }
+
     void createRenderPass()
     {
         VkAttachmentDescription colorAttachment{};
@@ -690,13 +747,26 @@ private:
         subpass.pDepthStencilAttachment = &depthAttachmentRef;
         subpass.pResolveAttachments = &colorAttachmentResolveRef;
 
-        VkSubpassDependency dependency{};
-        dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
-        dependency.dstSubpass = 0;
-        dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
-        dependency.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-        dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
-        dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;;
+        VkSubpassDependency dependency1{};
+        dependency1.srcSubpass = VK_SUBPASS_EXTERNAL;
+        dependency1.dstSubpass = 0;
+        //dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+        dependency1.srcStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT;
+        //dependency.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+        dependency1.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        //dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+        dependency1.dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+        //dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT;
+        dependency1.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+        VkSubpassDependency dependency2{};
+        dependency2.srcSubpass = 0;
+        dependency2.dstSubpass = VK_SUBPASS_EXTERNAL;
+        dependency2.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+        dependency2.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+        dependency2.dstStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT;
+        dependency2.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+        std::array<VkSubpassDependency, 2> dependencies = {dependency1, dependency2};
 
         std::array<VkAttachmentDescription, 3> attachments = {colorAttachment, depthAttachment, colorAttachmentResolve};
         VkRenderPassCreateInfo renderPassInfo{};
@@ -705,8 +775,8 @@ private:
         renderPassInfo.pAttachments = attachments.data();
         renderPassInfo.subpassCount = 1;
         renderPassInfo.pSubpasses = &subpass;
-        renderPassInfo.dependencyCount = 1;
-        renderPassInfo.pDependencies = &dependency;
+        renderPassInfo.dependencyCount = 2;
+        renderPassInfo.pDependencies = dependencies.data();
 
         if (vkCreateRenderPass(mDevice, &renderPassInfo, nullptr, &mRenderPass) != VK_SUCCESS)
         {
@@ -729,22 +799,36 @@ private:
         samplerLayoutBinding.pImmutableSamplers = nullptr;
         samplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
-        std::array<VkDescriptorSetLayoutBinding, 2> cubeBindings = {uboLayoutBinding, samplerLayoutBinding};
+        VkDescriptorSetLayoutBinding shadowMapSamplerLayoutBinding{};
+        shadowMapSamplerLayoutBinding.binding = 2;
+        shadowMapSamplerLayoutBinding.descriptorCount = 1;
+        shadowMapSamplerLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        shadowMapSamplerLayoutBinding.pImmutableSamplers = nullptr;
+        shadowMapSamplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+        std::array<VkDescriptorSetLayoutBinding, 3> cubeBindings = {uboLayoutBinding, samplerLayoutBinding, shadowMapSamplerLayoutBinding};
         VkDescriptorSetLayoutCreateInfo layoutInfo{};
         layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
         layoutInfo.bindingCount = static_cast<uint32_t>(cubeBindings.size());
         layoutInfo.pBindings = cubeBindings.data();
-
         if (vkCreateDescriptorSetLayout(mDevice, &layoutInfo, nullptr, &mCubeDescriptorSetLayout) != VK_SUCCESS) {
             throw std::runtime_error("failed to create cube descriptor set layout!");
         }
 
-        std::array<VkDescriptorSetLayoutBinding, 1> floorBindings = {uboLayoutBinding};
+        shadowMapSamplerLayoutBinding.binding = 1;
+        std::array<VkDescriptorSetLayoutBinding, 2> floorBindings = {uboLayoutBinding, shadowMapSamplerLayoutBinding};
         layoutInfo.bindingCount = static_cast<uint32_t>(floorBindings.size());
         layoutInfo.pBindings = floorBindings.data();
-
         if (vkCreateDescriptorSetLayout(mDevice, &layoutInfo, nullptr, &mFloorDescriptorSetLayout) != VK_SUCCESS) {
             throw std::runtime_error("failed to create floor descriptor set layout!");
+        }
+
+        uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+        std::array<VkDescriptorSetLayoutBinding, 1> shadowMapBindings = {uboLayoutBinding};
+        layoutInfo.bindingCount = static_cast<uint32_t> (shadowMapBindings.size());
+        layoutInfo.pBindings = shadowMapBindings.data();
+        if(vkCreateDescriptorSetLayout(mDevice, &layoutInfo, nullptr, &mShadowMapDescriptorSetLayout) != VK_SUCCESS) {
+            throw std::runtime_error("failed to create shadow map descriptor set layout!");
         }
     }
 
@@ -941,15 +1025,149 @@ private:
             throw std::runtime_error("failed to create graphics pipeline!");
         }
 
+
         vkDestroyShaderModule(mDevice, cubeFragShaderModule, nullptr);
         vkDestroyShaderModule(mDevice, cubeVertShaderModule, nullptr);
         vkDestroyShaderModule(mDevice, floorFragShaderModule, nullptr);
         vkDestroyShaderModule(mDevice, floorVertShaderModule, nullptr);
     }
 
+    void createShadowMapGraphicsPipeline()
+    {
+        auto shadowMapVertShaderCode = readFile("shaders/shadowMapVert.spv");
+        auto shadowMapFragShaderCode = readFile("shaders/shadowMapFrag.spv");
+
+        VkShaderModule shadowMapVertShaderModule = createShaderModule(shadowMapVertShaderCode);
+        VkShaderModule shadowMapFragShaderModule = createShaderModule(shadowMapFragShaderCode);
+        VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
+        vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
+        vertShaderStageInfo.module = shadowMapVertShaderModule;
+        vertShaderStageInfo.pName = "main";
+        VkPipelineShaderStageCreateInfo fragShaderStageInfo{};
+        fragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+        fragShaderStageInfo.module = shadowMapFragShaderModule;
+        fragShaderStageInfo.pName = "main";
+        VkPipelineShaderStageCreateInfo shadowMapShaderStages[] = {vertShaderStageInfo, fragShaderStageInfo};
+
+        VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
+        vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+        auto bindingDescription = Vertex::getBindingDescription();
+        vertexInputInfo.vertexBindingDescriptionCount = 1;
+        vertexInputInfo.pVertexBindingDescriptions = &bindingDescription;
+        auto vertexAttributeDescription = Vertex::getAttributeDescriptions();
+        vertexInputInfo.vertexAttributeDescriptionCount = 3;
+        vertexInputInfo.pVertexAttributeDescriptions = vertexAttributeDescription.data();
+
+        VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
+        inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+        inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+        inputAssembly.primitiveRestartEnable = VK_FALSE;
+
+        VkViewport viewport{};
+        viewport.x = 0.0f;
+        viewport.y = 0.0f;
+        viewport.width = (float)mSwapChainExtent.width;
+        viewport.height = (float)mSwapChainExtent.height;
+        viewport.minDepth = 0.0f;
+        viewport.maxDepth = 1.0f;
+        VkRect2D scissor{};
+        scissor.offset = {0, 0};
+        scissor.extent = mSwapChainExtent;
+        VkPipelineViewportStateCreateInfo viewportState{};
+        viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+        viewportState.viewportCount = 1;
+        viewportState.pViewports = &viewport;
+        viewportState.scissorCount = 1;
+        viewportState.pScissors = &scissor;
+
+        VkPipelineRasterizationStateCreateInfo rasterizer{};
+        rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+        rasterizer.depthClampEnable = VK_FALSE;
+        rasterizer.rasterizerDiscardEnable = VK_FALSE;
+        rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
+        rasterizer.lineWidth = 1.0f;
+        rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
+        rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+        rasterizer.depthBiasEnable = VK_FALSE;
+        rasterizer.depthBiasConstantFactor = 0.0f;
+        rasterizer.depthBiasClamp = 0.0f;
+        rasterizer.depthBiasSlopeFactor = 0.0f;
+
+        VkPipelineMultisampleStateCreateInfo multisampling{};
+        multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+        multisampling.sampleShadingEnable = VK_FALSE;
+        multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+        multisampling.minSampleShading = 1.0f;
+        multisampling.pSampleMask = nullptr;
+        multisampling.alphaToCoverageEnable = VK_FALSE;
+        multisampling.alphaToOneEnable = VK_FALSE;
+
+        VkPipelineColorBlendStateCreateInfo colorBlending{};
+        colorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+        colorBlending.logicOpEnable = VK_FALSE;
+        colorBlending.logicOp = VK_LOGIC_OP_COPY;
+        colorBlending.attachmentCount = 0;
+        colorBlending.pAttachments = nullptr;
+        colorBlending.blendConstants[0] = 0.0f;
+        colorBlending.blendConstants[1] = 0.0f;
+        colorBlending.blendConstants[2] = 0.0f;
+        colorBlending.blendConstants[3] = 0.0f;
+
+        VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
+        pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+        pipelineLayoutInfo.setLayoutCount = 1;
+        pipelineLayoutInfo.pSetLayouts = &mShadowMapDescriptorSetLayout;
+        pipelineLayoutInfo.pushConstantRangeCount = 0;
+        pipelineLayoutInfo.pPushConstantRanges = nullptr;
+        if (vkCreatePipelineLayout(mDevice, &pipelineLayoutInfo, nullptr, &mShadowMapPipelineLayout) != VK_SUCCESS)
+        {
+            throw std::runtime_error("failed to create shadowmap pipeline layout!");
+        }
+
+        VkPipelineDepthStencilStateCreateInfo depthStencil{};
+        depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+        depthStencil.depthTestEnable = VK_TRUE;
+        depthStencil.depthWriteEnable = VK_TRUE;
+        depthStencil.depthCompareOp = VK_COMPARE_OP_LESS;
+        depthStencil.depthBoundsTestEnable = VK_FALSE;
+        depthStencil.minDepthBounds = 0.0f;
+        depthStencil.maxDepthBounds = 1.0f;
+        depthStencil.stencilTestEnable = VK_FALSE;
+        depthStencil.front = {};
+        depthStencil.back = {};
+
+        VkGraphicsPipelineCreateInfo pipelineInfo{};
+        pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+        pipelineInfo.stageCount = 2;
+        pipelineInfo.pStages = shadowMapShaderStages;
+        pipelineInfo.pVertexInputState = &vertexInputInfo;
+        pipelineInfo.pInputAssemblyState = &inputAssembly;
+        pipelineInfo.pViewportState = &viewportState;
+        pipelineInfo.pRasterizationState = &rasterizer;
+        pipelineInfo.pMultisampleState = &multisampling;
+        pipelineInfo.pDepthStencilState = &depthStencil;
+        pipelineInfo.pColorBlendState = &colorBlending;
+        pipelineInfo.pDynamicState = nullptr;
+        pipelineInfo.layout = mShadowMapPipelineLayout;
+        pipelineInfo.renderPass = mShadowMapRenderPass;
+        pipelineInfo.subpass = 0;
+        pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
+        pipelineInfo.basePipelineIndex = -1;
+        if (vkCreateGraphicsPipelines(mDevice, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &mShadowMapGraphicsPipeline) != VK_SUCCESS)
+        {
+            throw std::runtime_error("failed to create graphics pipeline!");
+        }
+
+        vkDestroyShaderModule(mDevice, shadowMapVertShaderModule, nullptr);
+        vkDestroyShaderModule(mDevice, shadowMapFragShaderModule, nullptr);
+    }
+
     void createFramebuffers()
     {
         mSwapChainFramebuffers.resize(mSwapChainImageViews.size());
+        mShadowMapFramebuffers.resize(mSwapChainImageViews.size());
 
         for (size_t i = 0; i < mSwapChainImageViews.size(); ++i)
         {
@@ -972,6 +1190,25 @@ private:
             {
                 throw std::runtime_error("failed to create framebuffer!");
             }
+
+            std::array<VkImageView, 1> shadowMapFramebufferAttachments = {
+                mShadowMapImageViews[i],
+            };
+
+            VkFramebufferCreateInfo shadowMapFramebufferInfo{};
+            shadowMapFramebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+            shadowMapFramebufferInfo.renderPass = mShadowMapRenderPass;
+            shadowMapFramebufferInfo.attachmentCount = static_cast<uint32_t>(shadowMapFramebufferAttachments.size());
+            shadowMapFramebufferInfo.pAttachments = shadowMapFramebufferAttachments.data();
+            shadowMapFramebufferInfo.width = mSwapChainExtent.width;
+            shadowMapFramebufferInfo.height = mSwapChainExtent.height;
+            shadowMapFramebufferInfo.layers = 1;
+
+            if (vkCreateFramebuffer(mDevice, &shadowMapFramebufferInfo, nullptr, &mShadowMapFramebuffers[i]) != VK_SUCCESS)
+            {
+                throw std::runtime_error("failed to create shadow map framebuffer");
+            }
+
         }
     }
 
@@ -1036,22 +1273,22 @@ private:
     void loadCube() {
         // Face 1
         Vertex Face1Vertex1{};
-        Face1Vertex1.pos = glm::vec3(1.0, 1.0, 1.0);
+        Face1Vertex1.pos = glm::vec3(1.0, 1.0, 1.0) * 2.0f;
         Face1Vertex1.normal = glm::vec3(0.0, 0.0, 1.0);
         Face1Vertex1.texCoord = glm::vec2(1.0, 0.0);
         mCubeVertices.push_back(Face1Vertex1);
         Vertex Face1Vertex2{};
-        Face1Vertex2.pos = glm::vec3(1.0, -1.0, 1.0);
+        Face1Vertex2.pos = glm::vec3(1.0, -1.0, 1.0) * 2.0f;
         Face1Vertex2.normal = glm::vec3(0.0, 0.0, 1.0);
         Face1Vertex2.texCoord = glm::vec2(1.0, 1.0);
         mCubeVertices.push_back(Face1Vertex2);
         Vertex Face1Vertex3{};
-        Face1Vertex3.pos = glm::vec3(-1.0, -1.0, 1.0);
+        Face1Vertex3.pos = glm::vec3(-1.0, -1.0, 1.0) * 2.0f;
         Face1Vertex3.normal = glm::vec3(0.0, 0.0, 1.0);
         Face1Vertex3.texCoord = glm::vec2(0.0, 1.0);
         mCubeVertices.push_back(Face1Vertex3);
         Vertex Face1Vertex4{};
-        Face1Vertex4.pos = glm::vec3(-1.0, 1.0, 1.0);
+        Face1Vertex4.pos = glm::vec3(-1.0, 1.0, 1.0) * 2.0f;
         Face1Vertex4.normal = glm::vec3(0.0, 0.0, 1.0);
         Face1Vertex4.texCoord = glm::vec2(0.0, 0.0);
         mCubeVertices.push_back(Face1Vertex4);
@@ -1064,22 +1301,22 @@ private:
 
         // Face 2
         Vertex Face2Vertex1{};
-        Face1Vertex1.pos = glm::vec3(1.0, 1.0, -1.0);
+        Face1Vertex1.pos = glm::vec3(1.0, 1.0, -1.0) * 2.0f;
         Face1Vertex1.normal = glm::vec3(1.0, 0.0, 0.0);
         Face1Vertex1.texCoord = glm::vec2(1.0, 0.0);
         mCubeVertices.push_back(Face1Vertex1);
         Vertex Face2Vertex2{};
-        Face2Vertex2.pos = glm::vec3(1.0, -1.0, -1.0);
+        Face2Vertex2.pos = glm::vec3(1.0, -1.0, -1.0) * 2.0f;
         Face2Vertex2.normal = glm::vec3(1.0, 0.0, 0.0);
         Face2Vertex2.texCoord = glm::vec2(1.0, 1.0);
         mCubeVertices.push_back(Face2Vertex2);
         Vertex Face2Vertex3{};
-        Face2Vertex3.pos = glm::vec3(1.0, -1.0, 1.0);
+        Face2Vertex3.pos = glm::vec3(1.0, -1.0, 1.0) * 2.0f;
         Face2Vertex3.normal = glm::vec3(1.0, 0.0, 0.0);
         Face2Vertex3.texCoord = glm::vec2(0.0, 1.0);
         mCubeVertices.push_back(Face2Vertex3);
         Vertex Face2Vertex4{};
-        Face2Vertex4.pos = glm::vec3(1.0, 1.0, 1.0);
+        Face2Vertex4.pos = glm::vec3(1.0, 1.0, 1.0) * 2.0f;
         Face2Vertex4.normal = glm::vec3(1.0, 0.0, 0.0);
         Face2Vertex4.texCoord = glm::vec2(0.0, 0.0);
         mCubeVertices.push_back(Face2Vertex4);
@@ -1092,22 +1329,22 @@ private:
 
         // Face 3
         Vertex Face3Vertex1{};
-        Face3Vertex1.pos = glm::vec3(-1.0, 1.0, 1.0);
+        Face3Vertex1.pos = glm::vec3(-1.0, 1.0, 1.0) * 2.0f;
         Face3Vertex1.normal = glm::vec3(-1.0, 0.0, 0.0);
         Face3Vertex1.texCoord = glm::vec2(1.0, 0.0);
         mCubeVertices.push_back(Face3Vertex1);
         Vertex Face3Vertex2{};
-        Face3Vertex2.pos = glm::vec3(-1.0, -1.0, 1.0);
+        Face3Vertex2.pos = glm::vec3(-1.0, -1.0, 1.0) * 2.0f;
         Face3Vertex2.normal = glm::vec3(-1.0, 0.0, 0.0);
         Face3Vertex2.texCoord = glm::vec2(1.0, 1.0);
         mCubeVertices.push_back(Face3Vertex2);
         Vertex Face3Vertex3{};
-        Face3Vertex3.pos = glm::vec3(-1.0, -1.0, -1.0);
+        Face3Vertex3.pos = glm::vec3(-1.0, -1.0, -1.0) * 2.0f;
         Face3Vertex3.normal = glm::vec3(-1.0, 0.0, 0.0);
         Face3Vertex3.texCoord = glm::vec2(0.0, 1.0);
         mCubeVertices.push_back(Face3Vertex3);
         Vertex Face3Vertex4{};
-        Face3Vertex4.pos = glm::vec3(-1.0, 1.0, -1.0);
+        Face3Vertex4.pos = glm::vec3(-1.0, 1.0, -1.0) * 2.0f;
         Face3Vertex4.normal = glm::vec3(-1.0, 0.0, 0.0);
         Face3Vertex4.texCoord = glm::vec2(0.0, 0.0);
         mCubeVertices.push_back(Face3Vertex4);
@@ -1120,22 +1357,22 @@ private:
 
         // Face 4
         Vertex Face4Vertex1{};
-        Face4Vertex1.pos = glm::vec3(1.0, 1.0, -1.0);
+        Face4Vertex1.pos = glm::vec3(1.0, 1.0, -1.0) * 2.0f;
         Face4Vertex1.normal = glm::vec3(0.0, 1.0, 0.0);
         Face4Vertex1.texCoord = glm::vec2(1.0, 0.0);
         mCubeVertices.push_back(Face4Vertex1);
         Vertex Face4Vertex2{};
-        Face4Vertex2.pos = glm::vec3(1.0, 1.0, 1.0);
+        Face4Vertex2.pos = glm::vec3(1.0, 1.0, 1.0) * 2.0f;
         Face4Vertex2.normal = glm::vec3(0.0, 1.0, 0.0);
         Face4Vertex2.texCoord = glm::vec2(1.0, 1.0);
         mCubeVertices.push_back(Face4Vertex2);
         Vertex Face4Vertex3{};
-        Face4Vertex3.pos = glm::vec3(-1.0, 1.0, 1.0);
+        Face4Vertex3.pos = glm::vec3(-1.0, 1.0, 1.0) * 2.0f;
         Face4Vertex3.normal = glm::vec3(0.0, 1.0, 0.0);
         Face4Vertex3.texCoord = glm::vec2(0.0, 1.0);
         mCubeVertices.push_back(Face4Vertex3);
         Vertex Face4Vertex4{};
-        Face4Vertex4.pos = glm::vec3(-1.0, 1.0, -1.0);
+        Face4Vertex4.pos = glm::vec3(-1.0, 1.0, -1.0) * 2.0f;
         Face4Vertex4.normal = glm::vec3(0.0, 1.0, 0.0);
         Face4Vertex4.texCoord = glm::vec2(0.0, 0.0);
         mCubeVertices.push_back(Face4Vertex4);
@@ -1148,22 +1385,22 @@ private:
 
         // Face 5
         Vertex Face5Vertex1{};
-        Face5Vertex1.pos = glm::vec3(-1.0, 1.0, -1.0);
+        Face5Vertex1.pos = glm::vec3(-1.0, 1.0, -1.0) * 2.0f;
         Face5Vertex1.normal = glm::vec3(0.0, 0.0, -1.0);
         Face5Vertex1.texCoord = glm::vec2(1.0, 0.0);
         mCubeVertices.push_back(Face5Vertex1);
         Vertex Face5Vertex2{};
-        Face5Vertex2.pos = glm::vec3(-1.0, -1.0, -1.0);
+        Face5Vertex2.pos = glm::vec3(-1.0, -1.0, -1.0) * 2.0f;
         Face5Vertex2.normal = glm::vec3(0.0, 0.0, -1.0);
         Face5Vertex2.texCoord = glm::vec2(1.0, 1.0);
         mCubeVertices.push_back(Face5Vertex2);
         Vertex Face5Vertex3{};
-        Face5Vertex3.pos = glm::vec3(1.0, -1.0, -1.0);
+        Face5Vertex3.pos = glm::vec3(1.0, -1.0, -1.0) * 2.0f;
         Face5Vertex3.normal = glm::vec3(0.0, 0.0, -1.0);
         Face5Vertex3.texCoord = glm::vec2(0.0, 1.0);
         mCubeVertices.push_back(Face5Vertex3);
         Vertex Face5Vertex4{};
-        Face5Vertex4.pos = glm::vec3(1.0, 1.0, -1.0);
+        Face5Vertex4.pos = glm::vec3(1.0, 1.0, -1.0) * 2.0f;
         Face5Vertex4.normal = glm::vec3(0.0, 0.0, -1.0);
         Face5Vertex4.texCoord = glm::vec2(0.0, 0.0);
         mCubeVertices.push_back(Face5Vertex4);
@@ -1176,22 +1413,22 @@ private:
 
         // Face 6
         Vertex Face6Vertex1{};
-        Face6Vertex1.pos = glm::vec3(1.0, -1.0, 1.0);
+        Face6Vertex1.pos = glm::vec3(1.0, -1.0, 1.0) * 2.0f;
         Face6Vertex1.normal = glm::vec3(0.0, -1.0, 0.0);
         Face6Vertex1.texCoord = glm::vec2(1.0, 0.0);
         mCubeVertices.push_back(Face6Vertex1);
         Vertex Face6Vertex2{};
-        Face6Vertex2.pos = glm::vec3(1.0, -1.0, -1.0);
+        Face6Vertex2.pos = glm::vec3(1.0, -1.0, -1.0) * 2.0f;
         Face6Vertex2.normal = glm::vec3(0.0, -1.0, 0.0);
         Face6Vertex2.texCoord = glm::vec2(1.0, 1.0);
         mCubeVertices.push_back(Face6Vertex2);
         Vertex Face6Vertex3{};
-        Face6Vertex3.pos = glm::vec3(-1.0, -1.0, -1.0);
+        Face6Vertex3.pos = glm::vec3(-1.0, -1.0, -1.0) * 2.0f;
         Face6Vertex3.normal = glm::vec3(0.0, -1.0, 0.0);
         Face6Vertex3.texCoord = glm::vec2(0.0, 1.0);
         mCubeVertices.push_back(Face6Vertex3);
         Vertex Face6Vertex4{};
-        Face6Vertex4.pos = glm::vec3(-1.0, -1.0, 1.0);
+        Face6Vertex4.pos = glm::vec3(-1.0, -1.0, 1.0) * 2.0f;
         Face6Vertex4.normal = glm::vec3(0.0, -1.0, 0.0);
         Face6Vertex4.texCoord = glm::vec2(0.0, 0.0);
         mCubeVertices.push_back(Face6Vertex4);
@@ -1205,26 +1442,25 @@ private:
 
     void loadFloor()
     {
-
         // Floor
         Vertex FloorVertex1{};
-        FloorVertex1.pos = glm::vec3(-2.0, 2.0, -1.0);
-        FloorVertex1.normal = glm::vec3(0.0, 0.0, -1.0);
+        FloorVertex1.pos = glm::vec3(-10.0, -2.0, 10.0);
+        FloorVertex1.normal = glm::vec3(0.0, 1.0, 0.0);
         FloorVertex1.texCoord = glm::vec2(1.0, 0.0);
         mFloorVertices.push_back(FloorVertex1);
         Vertex FloorVertex2{};
-        FloorVertex2.pos = glm::vec3(-2.0, -2.0, -1.0);
-        FloorVertex2.normal = glm::vec3(0.0, 0.0, -1.0);
+        FloorVertex2.pos = glm::vec3(10.0, -2.0, 10.0);
+        FloorVertex2.normal = glm::vec3(0.0, 1.0, 0.0);
         FloorVertex2.texCoord = glm::vec2(1.0, 1.0);
         mFloorVertices.push_back(FloorVertex2);
         Vertex FloorVertex3{};
-        FloorVertex3.pos = glm::vec3(2.0, -2.0, -1.0);
-        FloorVertex3.normal = glm::vec3(0.0, 0.0, -1.0);
+        FloorVertex3.pos = glm::vec3(10.0, -2.0, -10.0);
+        FloorVertex3.normal = glm::vec3(0.0, 1.0, 0.0);
         FloorVertex3.texCoord = glm::vec2(0.0, 1.0);
         mFloorVertices.push_back(FloorVertex3);
         Vertex FloorVertex4{};
-        FloorVertex4.pos = glm::vec3(2.0, 2.0, -1.0);
-        FloorVertex4.normal = glm::vec3(0.0, 0.0, -1.0);
+        FloorVertex4.pos = glm::vec3(-10.0, -2.0, -10.0);
+        FloorVertex4.normal = glm::vec3(0.0, 1.0, 0.0);
         FloorVertex4.texCoord = glm::vec2(0.0, 0.0);
         mFloorVertices.push_back(FloorVertex4);
         mFloorIndices.push_back(0);
@@ -1275,7 +1511,7 @@ private:
         vkFreeMemory(mDevice, stagingBufferMemory, nullptr);
     }
 
-        void createFloorVertexBuffer()
+    void createFloorVertexBuffer()
     {
         VkDeviceSize vertexBufferSize = sizeof(mFloorVertices[0]) * mFloorVertices.size();
 
@@ -1319,7 +1555,13 @@ private:
         glm::mat4 model;
         glm::mat4 view;
         glm::mat4 proj;
+        glm::mat4 lightSpaceMatrix;
         glm::vec3 lightPos;
+    };
+
+    struct ShadowMapUniformBufferObject {
+        glm::mat4 model;
+        glm::mat4 lightSpaceMatrix;
     };
 
     void createUniformBuffers() {
@@ -1334,6 +1576,19 @@ private:
             mUniformBuffersMemory[i]);
 
             vkMapMemory(mDevice, mUniformBuffersMemory[i], 0, bufferSize, 0, &mUniformBuffersMapped[i]);
+        }
+
+        bufferSize = sizeof(ShadowMapUniformBufferObject);
+        mShadowMapUniformBuffers.resize(MAX_FRAMES_IN_FLIGHT);
+        mShadowMapUniformBuffersMemory.resize(MAX_FRAMES_IN_FLIGHT);
+        mShadowMapUniformBuffersMapped.resize(MAX_FRAMES_IN_FLIGHT);
+
+        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
+            createBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, mShadowMapUniformBuffers[i],
+            mShadowMapUniformBuffersMemory[i]);
+
+            vkMapMemory(mDevice, mShadowMapUniformBuffersMemory[i], 0, bufferSize, 0, &mShadowMapUniformBuffersMapped[i]);
         }
     }
 
@@ -1375,15 +1630,15 @@ private:
     void createDescriptorPool() {
         std::array<VkDescriptorPoolSize, 2> poolSizes{};
         poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        poolSizes[0].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT * 2);
+        poolSizes[0].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT * 3);
         poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        poolSizes[1].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+        poolSizes[1].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT * 3);
 
         VkDescriptorPoolCreateInfo poolInfo{};
         poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
         poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
         poolInfo.pPoolSizes = poolSizes.data();
-        poolInfo.maxSets = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT * 2);
+        poolInfo.maxSets = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT * 3);
         if(vkCreateDescriptorPool(mDevice, &poolInfo, nullptr, &mDescriptorPool) != VK_SUCCESS) {
             throw std::runtime_error("failed to create descriptor pool!");
         }
@@ -1408,6 +1663,13 @@ private:
             throw std::runtime_error("failed to allocate floor descriptor sets!");
         }
 
+        std::vector<VkDescriptorSetLayout> shadowMapLayouts(MAX_FRAMES_IN_FLIGHT, mShadowMapDescriptorSetLayout);
+        allocInfo.pSetLayouts = shadowMapLayouts.data();
+        mShadowMapDescriptorSets.resize(MAX_FRAMES_IN_FLIGHT);
+        if(vkAllocateDescriptorSets(mDevice, &allocInfo, mShadowMapDescriptorSets.data()) != VK_SUCCESS) {
+            throw std::runtime_error("failed to allocate shadowmap descriptor sets!");
+        }
+
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
             VkDescriptorBufferInfo bufferInfo{};
             bufferInfo.buffer = mUniformsBuffers[i];
@@ -1419,7 +1681,12 @@ private:
             imageInfo.imageView = mTextureImageView;
             imageInfo.sampler = mTextureSampler;
 
-            std::array<VkWriteDescriptorSet, 2> cubeDescriptorWrites{};
+            VkDescriptorImageInfo shadowMapInfo{};
+            shadowMapInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            shadowMapInfo.imageView = mShadowMapImageViews[i];
+            shadowMapInfo.sampler = mShadowMapSampler;
+
+            std::array<VkWriteDescriptorSet, 3> cubeDescriptorWrites{};
             cubeDescriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
             cubeDescriptorWrites[0].dstSet = mCubeDescriptorSets[i];
             cubeDescriptorWrites[0].dstBinding = 0;
@@ -1437,10 +1704,18 @@ private:
             cubeDescriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
             cubeDescriptorWrites[1].descriptorCount = 1;
             cubeDescriptorWrites[1].pImageInfo = &imageInfo;
+
+            cubeDescriptorWrites[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            cubeDescriptorWrites[2].dstSet = mCubeDescriptorSets[i];
+            cubeDescriptorWrites[2].dstBinding = 2;
+            cubeDescriptorWrites[2].dstArrayElement = 0;
+            cubeDescriptorWrites[2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            cubeDescriptorWrites[2].descriptorCount = 1;
+            cubeDescriptorWrites[2].pImageInfo = &shadowMapInfo;
             vkUpdateDescriptorSets(mDevice, static_cast<uint32_t>(cubeDescriptorWrites.size()), 
                 cubeDescriptorWrites.data(), 0, nullptr);
             
-            std::array<VkWriteDescriptorSet, 1> FloorDescriptorWrites{};
+            std::array<VkWriteDescriptorSet, 2> FloorDescriptorWrites{};
             FloorDescriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
             FloorDescriptorWrites[0].dstSet = mFloorDescriptorSets[i];
             FloorDescriptorWrites[0].dstBinding = 0;
@@ -1450,9 +1725,33 @@ private:
             FloorDescriptorWrites[0].pBufferInfo = &bufferInfo;
             FloorDescriptorWrites[0].pImageInfo = nullptr; // Optional
             FloorDescriptorWrites[0].pTexelBufferView = nullptr; // Optional
+
+            FloorDescriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            FloorDescriptorWrites[1].dstSet = mFloorDescriptorSets[i];
+            FloorDescriptorWrites[1].dstBinding = 1;
+            FloorDescriptorWrites[1].dstArrayElement = 0;
+            FloorDescriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            FloorDescriptorWrites[1].descriptorCount = 1;
+            FloorDescriptorWrites[1].pImageInfo = &shadowMapInfo; // Optional
+            FloorDescriptorWrites[1].pTexelBufferView = nullptr; // Optional
             vkUpdateDescriptorSets(mDevice, static_cast<uint32_t>(FloorDescriptorWrites.size()), 
                 FloorDescriptorWrites.data(), 0, nullptr);
-            
+
+            bufferInfo.buffer = mShadowMapUniformBuffers[i];
+            bufferInfo.offset = 0;
+            bufferInfo.range = sizeof(ShadowMapUniformBufferObject);
+            std::array<VkWriteDescriptorSet, 1> ShadowMapDescriptorWrites{};
+            ShadowMapDescriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            ShadowMapDescriptorWrites[0].dstSet = mShadowMapDescriptorSets[i];
+            ShadowMapDescriptorWrites[0].dstBinding = 0;
+            ShadowMapDescriptorWrites[0].dstArrayElement = 0;
+            ShadowMapDescriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+            ShadowMapDescriptorWrites[0].descriptorCount = 1;
+            ShadowMapDescriptorWrites[0].pBufferInfo = &bufferInfo;
+            ShadowMapDescriptorWrites[0].pImageInfo = nullptr;
+            ShadowMapDescriptorWrites[0].pTexelBufferView = nullptr;
+            vkUpdateDescriptorSets(mDevice, static_cast<uint32_t>(ShadowMapDescriptorWrites.size()),
+                ShadowMapDescriptorWrites.data(), 0, nullptr);
         }
     }
 
@@ -1500,7 +1799,8 @@ private:
         barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         barrier.image = image;
-        if (newLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) {
+        //if (newLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL || oldLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) {
+        if (format >= VK_FORMAT_D16_UNORM && format <= VK_FORMAT_D32_SFLOAT_S8_UINT) {
             barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
 
             if (hasStencilComponent(format)) {
@@ -1536,9 +1836,7 @@ private:
             barrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
             sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
             destinationStage = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
-        } 
-        
-        else {
+        } else {
             throw std::invalid_argument("unsupported layout transition!");
         }
 
@@ -1726,6 +2024,9 @@ private:
         if (vkCreateSampler(mDevice, &samplerInfo, nullptr, &mTextureSampler) != VK_SUCCESS) {
             throw std::runtime_error("failed to create texture sampler!");
         }
+        if (vkCreateSampler(mDevice, &samplerInfo, nullptr, &mShadowMapSampler) != VK_SUCCESS) {
+            throw std::runtime_error("failed to create texture sampler!");
+        }
     }
 
     VkFormat findSupportedFormat(const std::vector<VkFormat>& candidates, VkImageTiling tiling, VkFormatFeatureFlags features) {
@@ -1761,6 +2062,17 @@ private:
             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, mDepthImage, mDepthImageMemory);
         mDepthImageView = createImageView(mDepthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, 1);
         transitionImageLayout(mDepthImage, depthFormat, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, 1);
+
+        mShadowMapImages.resize(mSwapChainImageViews.size());
+        mShadowMapImageViews.resize(mSwapChainImageViews.size());
+        mShadowMapImageMemory.resize(mSwapChainImageViews.size());
+        for (size_t i = 0; i < mSwapChainImageViews.size(); ++i)
+        {
+            createImage(mSwapChainExtent.width, mSwapChainExtent.height, 1, VK_SAMPLE_COUNT_1_BIT, depthFormat,
+                VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT|VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, mShadowMapImages[i],mShadowMapImageMemory[i]);
+            mShadowMapImageViews[i] = createImageView(mShadowMapImages[i], depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, 1);
+            transitionImageLayout(mShadowMapImages[i], depthFormat, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, 1);
+        }
     }
 
     void createColorResources() {
@@ -1781,8 +2093,10 @@ private:
         createLogicalDevice();
         createSwapChain();
         createImageViews();
+        createShadowMapRenderPass();
         createRenderPass();
         createDescriptorSetLayout();
+        createShadowMapGraphicsPipeline();
         createGraphicsPipeline();
         createCommandPool();
         createColorResources();
@@ -1810,12 +2124,28 @@ private:
         auto currentTime = std::chrono::high_resolution_clock::now();
         float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
         UniformBufferObject ubo{};
-        ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-        ubo.view = glm::lookAt(glm::vec3(5.0f, 5.0f, 5.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+        // ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+        ubo.model = glm::rotate(glm::mat4(1.0f), glm::radians(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+        ubo.view = glm::lookAt(glm::vec3(-20.0f, 10.0f, -20.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
         ubo.proj = glm::perspective(glm::radians(45.0f), mSwapChainExtent.width / (float) mSwapChainExtent.height, 0.1f, 100.0f);
         ubo.proj[1][1] *= -1;
-        ubo.lightPos = glm::vec3(10, 10, 0);
+        ubo.lightPos = glm::vec3(5, 5, 5);
+
+        float nearPlane = 0.1f;
+        float farPlane = 25.0f;
+        glm::mat4 lightProjection = glm::ortho(-20.0f, 20.0f, -20.0f, 20.0f, nearPlane, farPlane);
+        lightProjection[1][1] *= -1;
+        glm::mat4 lightView = glm::lookAt(glm::vec3(10.0f, 5.0f, 10.0f),
+                                  glm::vec3( 0.0f, 0.0f,  0.0f),
+                                  glm::vec3( 0.0f, 1.0f,  0.0f));
+        glm::mat4 lightSpaceMatrix = lightProjection * lightView;
+        ubo.lightSpaceMatrix = lightSpaceMatrix;
         memcpy(mUniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
+
+        ShadowMapUniformBufferObject shadowMapUBO{};
+        shadowMapUBO.model = ubo.model;
+        shadowMapUBO.lightSpaceMatrix = lightSpaceMatrix;
+        memcpy(mShadowMapUniformBuffersMapped[currentImage], &shadowMapUBO, sizeof(shadowMapUBO));
     }
 
     VkCommandBuffer beginSingleTimeCommands() {
@@ -1854,6 +2184,10 @@ private:
 
     void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex, uint32_t currentFrameIndex)
     {
+        VkBuffer cubeVertexBuffers[] = {mCubeVertexBuffer};
+        VkBuffer floorVertexBuffers[] = {mFloorVertexBuffer};
+        VkDeviceSize offsets[] = {0};
+
         VkCommandBufferBeginInfo beginInfo{};
         beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
         beginInfo.flags = 0;
@@ -1863,6 +2197,47 @@ private:
         {
             throw std::runtime_error("failed to start recording command buffers");
         }
+
+        VkRenderPassBeginInfo shadowMapRenderPassInfo{};
+        shadowMapRenderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+        shadowMapRenderPassInfo.renderPass = mShadowMapRenderPass;
+        shadowMapRenderPassInfo.framebuffer = mShadowMapFramebuffers[imageIndex];
+        shadowMapRenderPassInfo.renderArea.offset = {0, 0};
+        shadowMapRenderPassInfo.renderArea.extent = mSwapChainExtent;
+        VkClearValue shadowMapClearValue{};
+        shadowMapClearValue.depthStencil = {1.0f, 0};
+        shadowMapRenderPassInfo.clearValueCount = 1;
+        shadowMapRenderPassInfo.pClearValues = &shadowMapClearValue;
+        vkCmdBeginRenderPass(commandBuffer, &shadowMapRenderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mShadowMapGraphicsPipeline);
+        vkCmdBindVertexBuffers(commandBuffer, 0, 1, cubeVertexBuffers, offsets);
+        vkCmdBindIndexBuffer(commandBuffer, mCubeIndexBuffer, 0, VK_INDEX_TYPE_UINT32);
+        vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mShadowMapPipelineLayout, 0, 1, &mShadowMapDescriptorSets[currentFrameIndex], 0, nullptr);
+        vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(mCubeIndices.size()), 1, 0, 0, 0);
+        vkCmdBindVertexBuffers(commandBuffer, 0, 1, floorVertexBuffers, offsets);
+        vkCmdBindIndexBuffer(commandBuffer, mFloorIndexBuffer, 0, VK_INDEX_TYPE_UINT32);
+        vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(mFloorIndices.size()), 1, 0, 0, 0);
+        vkCmdEndRenderPass(commandBuffer);
+
+        VkFormat depthFormat = findDepthFormat();
+        VkImageMemoryBarrier barrier{};
+        barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        barrier.oldLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+        barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.image = mShadowMapImages[imageIndex];
+        barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+        if (hasStencilComponent(depthFormat)) {
+            barrier.subresourceRange.aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
+        }
+        barrier.subresourceRange.baseMipLevel = 0;
+        barrier.subresourceRange.levelCount = 1;
+        barrier.subresourceRange.baseArrayLayer = 0;
+        barrier.subresourceRange.layerCount = 1;
+        barrier.srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+        barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1, &barrier);
 
         VkRenderPassBeginInfo renderPassInfo{};
         renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
@@ -1878,21 +2253,25 @@ private:
         vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
         vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mCubeGraphicsPipeline);
 
-        VkBuffer cubeVertexBuffers[] = {mCubeVertexBuffer};
-        VkDeviceSize offsets[] = {0};
         vkCmdBindVertexBuffers(commandBuffer, 0, 1, cubeVertexBuffers, offsets);
         vkCmdBindIndexBuffer(commandBuffer, mCubeIndexBuffer, 0, VK_INDEX_TYPE_UINT32);
         vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mCubePipelineLayout, 0, 1, &mCubeDescriptorSets[currentFrameIndex], 0, nullptr);
         vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(mCubeIndices.size()), 1, 0, 0, 0);
 
         vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mFloorGraphicsPipeline);
-        VkBuffer floorVertexBuffers[] = {mFloorVertexBuffer};
         vkCmdBindVertexBuffers(commandBuffer, 0, 1, floorVertexBuffers, offsets);
         vkCmdBindIndexBuffer(commandBuffer, mFloorIndexBuffer, 0, VK_INDEX_TYPE_UINT32);
         vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mFloorPipelineLayout, 0, 1, &mFloorDescriptorSets[currentFrameIndex], 0, nullptr);
         vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(mFloorIndices.size()), 1, 0, 0, 0);
 
         vkCmdEndRenderPass(commandBuffer);
+
+        // barrier.oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        // barrier.newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+        // barrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        // barrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+        // vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT, 0, 0, nullptr, 0, nullptr, 1, &barrier);
+
         if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS)
         {
             throw std::runtime_error("failed to record command buffer!");
@@ -1985,12 +2364,16 @@ private:
 
         for (size_t i = 0; i < mSwapChainImageViews.size(); i++)
         {
+            vkDestroyImage(mDevice, mShadowMapImages[i], nullptr);
+            vkDestroyImageView(mDevice, mShadowMapImageViews[i], nullptr);
+            vkFreeMemory(mDevice, mShadowMapImageMemory[i], nullptr);
             vkDestroyImageView(mDevice, mSwapChainImageViews[i], nullptr);
         }
 
         for (size_t i = 0; i < mSwapChainFramebuffers.size(); i++)
         {
             vkDestroyFramebuffer(mDevice, mSwapChainFramebuffers[i], nullptr);
+            vkDestroyFramebuffer(mDevice, mShadowMapFramebuffers[i], nullptr);
         }
 
         vkDestroySwapchainKHR(mDevice, mSwapChain, nullptr);
@@ -1999,6 +2382,7 @@ private:
     void cleanup()
     {
         cleanupSwapChain();
+        vkDestroySampler(mDevice, mShadowMapSampler, nullptr);
         vkDestroyBuffer(mDevice, mCubeIndexBuffer, nullptr);
         vkFreeMemory(mDevice, mCubeIndexBufferMemory, nullptr);
         vkDestroyBuffer(mDevice, mCubeVertexBuffer, nullptr);
@@ -2009,10 +2393,13 @@ private:
         vkFreeMemory(mDevice, mFloorVertexBufferMemory, nullptr);
         vkDestroyPipeline(mDevice, mCubeGraphicsPipeline, nullptr);
         vkDestroyPipeline(mDevice, mFloorGraphicsPipeline, nullptr);
+        vkDestroyPipeline(mDevice, mShadowMapGraphicsPipeline, nullptr);
 
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
             vkDestroyBuffer(mDevice, mUniformsBuffers[i], nullptr);
             vkFreeMemory(mDevice, mUniformBuffersMemory[i], nullptr);
+            vkDestroyBuffer(mDevice, mShadowMapUniformBuffers[i], nullptr);
+            vkFreeMemory(mDevice, mShadowMapUniformBuffersMemory[i], nullptr);
         }
         vkDestroySampler(mDevice, mTextureSampler, nullptr);
         vkDestroyImageView(mDevice, mTextureImageView, nullptr);
@@ -2022,8 +2409,11 @@ private:
         vkDestroyDescriptorPool(mDevice, mDescriptorPool, nullptr);
         vkDestroyDescriptorSetLayout(mDevice, mCubeDescriptorSetLayout, nullptr);
         vkDestroyDescriptorSetLayout(mDevice, mFloorDescriptorSetLayout, nullptr);
+        vkDestroyDescriptorSetLayout(mDevice, mShadowMapDescriptorSetLayout, nullptr);
         vkDestroyPipelineLayout(mDevice, mCubePipelineLayout, nullptr);
         vkDestroyPipelineLayout(mDevice, mFloorPipelineLayout, nullptr);
+        vkDestroyPipelineLayout(mDevice, mShadowMapPipelineLayout, nullptr);
+        vkDestroyRenderPass(mDevice, mShadowMapRenderPass, nullptr);
         vkDestroyRenderPass(mDevice, mRenderPass, nullptr);
         for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
         {
@@ -2055,16 +2445,25 @@ private:
     VkSwapchainKHR mSwapChain;
     std::vector<VkImage> mSwapChainImages;
     std::vector<VkImageView> mSwapChainImageViews;
+    std::vector<VkImage> mShadowMapImages;
+    std::vector<VkImageView> mShadowMapImageViews;
+    std::vector<VkDeviceMemory> mShadowMapImageMemory;
+    VkSampler mShadowMapSampler;
     VkFormat mSwapChainImageFormat;
     VkExtent2D mSwapChainExtent;
+    VkRenderPass mShadowMapRenderPass;
     VkRenderPass mRenderPass;
     VkDescriptorSetLayout mCubeDescriptorSetLayout;
     VkDescriptorSetLayout mFloorDescriptorSetLayout;
+    VkDescriptorSetLayout mShadowMapDescriptorSetLayout;
     VkPipelineLayout mCubePipelineLayout;
     VkPipelineLayout mFloorPipelineLayout;
+    VkPipelineLayout mShadowMapPipelineLayout;
     VkPipeline mCubeGraphicsPipeline;
     VkPipeline mFloorGraphicsPipeline;
+    VkPipeline mShadowMapGraphicsPipeline;
     std::vector<VkFramebuffer> mSwapChainFramebuffers;
+    std::vector<VkFramebuffer> mShadowMapFramebuffers;
     VkCommandPool mCommandPool;
     std::vector<VkCommandBuffer> mCommandBuffers;
     std::vector<VkSemaphore> mImageAvailableSemaphores;
@@ -2099,9 +2498,13 @@ private:
     std::vector<VkBuffer> mUniformsBuffers;
     std::vector<VkDeviceMemory> mUniformBuffersMemory;
     std::vector<void*> mUniformBuffersMapped;
+    std::vector<VkBuffer> mShadowMapUniformBuffers;
+    std::vector<VkDeviceMemory> mShadowMapUniformBuffersMemory;
+    std::vector<void*> mShadowMapUniformBuffersMapped;
     VkDescriptorPool mDescriptorPool;
     std::vector<VkDescriptorSet> mCubeDescriptorSets;
     std::vector<VkDescriptorSet> mFloorDescriptorSets;
+    std::vector<VkDescriptorSet> mShadowMapDescriptorSets;
 };
 
 int main()
