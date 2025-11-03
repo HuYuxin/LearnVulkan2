@@ -376,6 +376,27 @@ private:
 
     bool isDeviceSuitable(VkPhysicalDevice device)
     {
+        // 1. Set up the pNext chain for VkPhysicalDeviceProperties2
+        VkPhysicalDeviceDriverProperties driverProperties = {};
+        driverProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES;
+
+        VkPhysicalDeviceProperties2 deviceProperties2 = {};
+        deviceProperties2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+        deviceProperties2.pNext = &driverProperties;
+
+        // 2. Get the physical device properties
+        vkGetPhysicalDeviceProperties2(device, &deviceProperties2);
+
+        std::string deviceName(deviceProperties2.properties.deviceName);
+        // Intel driver crashes when using multisampled framebuffer
+        if (deviceName.find("Intel") != std::string::npos) {
+            return false;
+        }
+        // 3. Print the driver information
+        std::cout << "Device Name: " << deviceProperties2.properties.deviceName << std::endl;
+        std::cout << "Driver Name: " << driverProperties.driverName << std::endl;
+        std::cout << "Driver Info: " << driverProperties.driverInfo << std::endl;
+
         QueueFamilyIndices indices = findQueueFamilies(device);
 
         bool extensionsSupported = checkDeviceExtensionSupport(device);
@@ -399,11 +420,29 @@ private:
         return indices.isComplete() && extensionsSupported && swapChainAdequate && supportedFeatures.samplerAnisotropy && swapchainMaintenance1Features.swapchainMaintenance1 == VK_TRUE;
     }
 
+    void getVulkanDriverInfo(VkPhysicalDevice physicalDevice) {
+    // 1. Set up the pNext chain for VkPhysicalDeviceProperties2
+    VkPhysicalDeviceDriverProperties driverProperties = {};
+    driverProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES;
+
+    VkPhysicalDeviceProperties2 deviceProperties2 = {};
+    deviceProperties2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+    deviceProperties2.pNext = &driverProperties;
+
+    // 2. Get the physical device properties
+    vkGetPhysicalDeviceProperties2(physicalDevice, &deviceProperties2);
+
+    // 3. Print the driver information
+    std::cout << "Device Name: " << deviceProperties2.properties.deviceName << std::endl;
+    std::cout << "Driver Name: " << driverProperties.driverName << std::endl;
+    std::cout << "Driver Info: " << driverProperties.driverInfo << std::endl;
+}
 
     void pickPhysicalDevice()
     {
         uint32_t deviceCount = 0;
         vkEnumeratePhysicalDevices(mInstance, &deviceCount, nullptr);
+        std::cout << deviceCount << std::endl;
         if (deviceCount == 0)
         {
             throw std::runtime_error("failed to find GPUs with Vulkan support!");
@@ -425,6 +464,7 @@ private:
         {
             throw std::runtime_error("failed to find a suitable GPU!");
         }
+
     }
 
     void createLogicalDevice()
