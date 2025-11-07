@@ -2,3 +2,4 @@
 learningNotes.txt
 VulkanBasic
 shaders/*.spv
+*.o

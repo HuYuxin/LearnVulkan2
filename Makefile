@@ -4,8 +4,14 @@ CFLAGS = -std=c++17 -I$(STB_INCLUDE_PATH) -I$(TINYOBJ_INCLUDE_PATH)
 
 LDFLAGS = -lglfw -lvulkan -ldl -lpthread -lX11 -lXxf86vm -lXrandr -lXi
 
-VulkanBasic: main.cpp
-	g++ $(CFLAGS) -o VulkanBasic main.cpp $(LDFLAGS)
+
+SRCS = main.cpp cube.cpp floor.cpp vulkanInstance.cpp
+OBJS = $(SRCS:.cpp=.o)
+VulkanBasic: $(OBJS)
+	g++ $(CFLAGS) -o VulkanBasic $(OBJS) $(LDFLAGS)
+
+%.o: %.cpp
+	g++ $(CFLAGS) -c $< -o $@
 
 .PHONY: test clean
 
