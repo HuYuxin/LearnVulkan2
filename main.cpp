@@ -100,8 +100,6 @@ public:
         cleanup();
     }
 
-    
-
 private:
     void initWindow()
     {
@@ -1742,6 +1740,7 @@ private:
         while (!glfwWindowShouldClose(mWindow))
         {
             glfwPollEvents();
+            processInput();
             drawFrame();
         }
 
@@ -1778,6 +1777,27 @@ private:
         }
 
         vkDestroySwapchainKHR(logicalDevice, mSwapChain, nullptr);
+    }
+
+    void processInput() {
+        if (glfwGetKey(mWindow, GLFW_KEY_W) == GLFW_PRESS) {
+            mCamera->translate(glm::vec3(0.0, 0.0, 1.0));
+        }
+        if (glfwGetKey(mWindow, GLFW_KEY_S) == GLFW_PRESS) {
+            mCamera->translate(glm::vec3(0.0, 0.0, -1.0));
+        }
+        if (glfwGetKey(mWindow, GLFW_KEY_A) == GLFW_PRESS) {
+            mCamera->translate(glm::vec3(1.0, 0.0, 0.0));
+        }
+        if (glfwGetKey(mWindow, GLFW_KEY_D) == GLFW_PRESS) {
+            mCamera->translate(glm::vec3(-1.0, 0.0, 0.0));
+        }
+        if (glfwGetKey(mWindow, GLFW_KEY_R) == GLFW_PRESS) {
+            mCamera->translate(glm::vec3(0.0, 1.0, 0.0));
+        }
+        if (glfwGetKey(mWindow, GLFW_KEY_F) == GLFW_PRESS) {
+            mCamera->translate(glm::vec3(0.0, -1.0, 0.0));
+        }
     }
 
     void cleanup()
