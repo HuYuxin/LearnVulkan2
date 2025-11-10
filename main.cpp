@@ -26,6 +26,7 @@
 #include <vector>
 #include <unordered_map>
 
+#include "camera.hpp"
 #include "cube.hpp"
 #include "floor.hpp"
 #include "Vertex.hpp"
@@ -1463,6 +1464,10 @@ private:
         }
     }
 
+    void createCamera() {
+        mCamera = new Camera(mSwapChainExtent.width, mSwapChainExtent.height);
+    }
+
     VkFormat findSupportedFormat(VkPhysicalDevice physicalDevice, const std::vector<VkFormat>& candidates, VkImageTiling tiling, VkFormatFeatureFlags features) {
         for (VkFormat format : candidates) {
             VkFormatProperties props;
@@ -1544,6 +1549,7 @@ private:
         createDescriptorSets(mVulkanInstance.getLogicalDevice());
         createCommandBuffer(mVulkanInstance.getCommandPool(), mVulkanInstance.getLogicalDevice());
         createSyncObjects(mVulkanInstance.getLogicalDevice());
+        createCamera();
     }
 
     void updateUniformBuffer(uint32_t currentImage) {
@@ -1553,8 +1559,8 @@ private:
         float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
         UniformBufferObject ubo{};
         ubo.model = glm::rotate(glm::mat4(1.0f), glm::radians(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-        ubo.view = glm::lookAt(glm::vec3(-20.0f, 10.0f, -20.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-        ubo.proj = glm::perspective(glm::radians(45.0f), mSwapChainExtent.width / (float) mSwapChainExtent.height, 0.1f, 100.0f);
+        ubo.view = glm::lookAt(mCamera->getCameraPosition(), mCamera->getCameraLookAtPosition(), mCamera->getCameraUp());
+        ubo.proj = glm::perspective(mCamera->getFovY(), mCamera->getAspect(), mCamera->getNear(), mCamera->getFar());
         ubo.proj[1][1] *= -1;
         ubo.lightPos = glm::vec3(5, 5, 5);
 
@@ -1742,6 +1748,12 @@ private:
         vkDeviceWaitIdle(mVulkanInstance.getLogicalDevice());
     }
 
+    void cleanupCamera()
+    {
+        delete mCamera;
+
+    }
+
     void cleanupSwapChain(VkDevice logicalDevice)
     {
         vkDestroyImageView(logicalDevice, mColorImageView, nullptr);
@@ -1813,6 +1825,7 @@ private:
         mVulkanInstance.destroy();
         glfwDestroyWindow(mWindow);
         glfwTerminate();
+        cleanupCamera();
     }
 
     VulkanInstance mVulkanInstance;
@@ -1872,6 +1885,7 @@ private:
     std::vector<VkDescriptorSet> mCubeDescriptorSets;
     std::vector<VkDescriptorSet> mFloorDescriptorSets;
     std::vector<VkDescriptorSet> mShadowMapDescriptorSets;
+    Camera* mCamera;
 };
 
 int main()
