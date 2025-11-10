@@ -2,7 +2,8 @@
 
 layout(location = 0) in vec3 fragPosition;
 layout(location = 1) in vec3 fragNormal;
-layout(location = 2) in vec4 fragPositionLightSpace;
+layout(location = 2) in vec2 fragTexCoord;
+layout(location = 3) in vec4 fragPositionLightSpace;
 
 layout(location = 0) out vec4 outColor;
 
@@ -13,7 +14,8 @@ layout(binding = 0) uniform UniformBufferObject {
     mat4 lightSpaceMatrix;
     vec3 lightPos;
 } ubo;
-layout(binding = 1) uniform sampler2D shadowMap;
+layout(binding = 1) uniform sampler2D texSampler;
+layout(binding = 2) uniform sampler2D shadowMap;
 
 float calculateShadowFactor(vec4 fragmentPositionLightSpace) {
     vec3 lightSpaceProjectionCoords = fragmentPositionLightSpace.xyz / fragmentPositionLightSpace.w;
@@ -28,5 +30,5 @@ void main() {
     float lambertFactor = max(dot(normalize(fragNormal), lightDirection), 0);
     float ambient = 0.1;
     float shadow = calculateShadowFactor(fragPositionLightSpace);
-    outColor = (ambient + (1.0 - shadow) * lambertFactor) * vec4(1.0, 1.0, 1.0, 1.0);
+    outColor = (ambient + (1.0 - shadow) * lambertFactor) * texture(texSampler, fragTexCoord);
 }

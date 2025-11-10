@@ -36,7 +36,8 @@ const uint32_t HEIGHT = 600;
 const int MAX_FRAMES_IN_FLIGHT = 2;
 
 const std::string MODEL_PATH = "models/viking_room.obj";
-const std::string TEXTURE_PATH = "textures/Texturelabs_Wood_134M.jpg";
+const std::string CUBE_TEXTURE_PATH = "textures/Texturelabs_Wood_134M.jpg";
+const std::string FLOOR_TEXTURE_PATH = "textures/floor.jpg";
 
 const std::vector<const char *> validationLayers = {
     "VK_LAYER_KHRONOS_validation"};
@@ -465,19 +466,19 @@ private:
     }
 
     void createDescriptorSetLayout(const VkDevice& logicalDevice) {
-        VkDescriptorSetLayoutBinding uboLayoutBinding{};
-        uboLayoutBinding.binding = 0;
-        uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        uboLayoutBinding.descriptorCount = 1;
-        uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
-        uboLayoutBinding.pImmutableSamplers = nullptr;
+        VkDescriptorSetLayoutBinding cubeUboLayoutBinding{};
+        cubeUboLayoutBinding.binding = 0;
+        cubeUboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        cubeUboLayoutBinding.descriptorCount = 1;
+        cubeUboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+        cubeUboLayoutBinding.pImmutableSamplers = nullptr;
 
-        VkDescriptorSetLayoutBinding samplerLayoutBinding{};
-        samplerLayoutBinding.binding = 1;
-        samplerLayoutBinding.descriptorCount = 1;
-        samplerLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        samplerLayoutBinding.pImmutableSamplers = nullptr;
-        samplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+        VkDescriptorSetLayoutBinding cubeSamplerLayoutBinding{};
+        cubeSamplerLayoutBinding.binding = 1;
+        cubeSamplerLayoutBinding.descriptorCount = 1;
+        cubeSamplerLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        cubeSamplerLayoutBinding.pImmutableSamplers = nullptr;
+        cubeSamplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
         VkDescriptorSetLayoutBinding shadowMapSamplerLayoutBinding{};
         shadowMapSamplerLayoutBinding.binding = 2;
@@ -486,7 +487,7 @@ private:
         shadowMapSamplerLayoutBinding.pImmutableSamplers = nullptr;
         shadowMapSamplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
-        std::array<VkDescriptorSetLayoutBinding, 3> cubeBindings = {uboLayoutBinding, samplerLayoutBinding, shadowMapSamplerLayoutBinding};
+        std::array<VkDescriptorSetLayoutBinding, 3> cubeBindings = {cubeUboLayoutBinding, cubeSamplerLayoutBinding, shadowMapSamplerLayoutBinding};
         VkDescriptorSetLayoutCreateInfo layoutInfo{};
         layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
         layoutInfo.bindingCount = static_cast<uint32_t>(cubeBindings.size());
@@ -495,16 +496,35 @@ private:
             throw std::runtime_error("failed to create cube descriptor set layout!");
         }
 
-        shadowMapSamplerLayoutBinding.binding = 1;
-        std::array<VkDescriptorSetLayoutBinding, 2> floorBindings = {uboLayoutBinding, shadowMapSamplerLayoutBinding};
+        VkDescriptorSetLayoutBinding floorUboLayoutBinding{};
+        floorUboLayoutBinding.binding = 0;
+        floorUboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        floorUboLayoutBinding.descriptorCount = 1;
+        floorUboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+        floorUboLayoutBinding.pImmutableSamplers = nullptr;
+
+        VkDescriptorSetLayoutBinding floorSamplerLayoutBinding{};
+        floorSamplerLayoutBinding.binding = 1;
+        floorSamplerLayoutBinding.descriptorCount = 1;
+        floorSamplerLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        floorSamplerLayoutBinding.pImmutableSamplers = nullptr;
+        floorSamplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+        std::array<VkDescriptorSetLayoutBinding, 3> floorBindings = {floorUboLayoutBinding, floorSamplerLayoutBinding, shadowMapSamplerLayoutBinding};
         layoutInfo.bindingCount = static_cast<uint32_t>(floorBindings.size());
         layoutInfo.pBindings = floorBindings.data();
         if (vkCreateDescriptorSetLayout(logicalDevice, &layoutInfo, nullptr, &mFloorDescriptorSetLayout) != VK_SUCCESS) {
             throw std::runtime_error("failed to create floor descriptor set layout!");
         }
 
-        uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-        std::array<VkDescriptorSetLayoutBinding, 1> shadowMapBindings = {uboLayoutBinding};
+
+        VkDescriptorSetLayoutBinding shadowMapUboLayoutBinding{};
+        shadowMapUboLayoutBinding.binding = 0;
+        shadowMapUboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        shadowMapUboLayoutBinding.descriptorCount = 1;
+        shadowMapUboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+        shadowMapUboLayoutBinding.pImmutableSamplers = nullptr;
+        std::array<VkDescriptorSetLayoutBinding, 1> shadowMapBindings = {shadowMapUboLayoutBinding};
         layoutInfo.bindingCount = static_cast<uint32_t> (shadowMapBindings.size());
         layoutInfo.pBindings = shadowMapBindings.data();
         if(vkCreateDescriptorSetLayout(logicalDevice, &layoutInfo, nullptr, &mShadowMapDescriptorSetLayout) != VK_SUCCESS) {
@@ -968,7 +988,7 @@ private:
         poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
         poolSizes[0].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT * 3);
         poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        poolSizes[1].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT * 3);
+        poolSizes[1].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT * 4);
 
         VkDescriptorPoolCreateInfo poolInfo{};
         poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
@@ -1012,10 +1032,15 @@ private:
             bufferInfo.offset = 0;
             bufferInfo.range = sizeof(UniformBufferObject);
 
-            VkDescriptorImageInfo imageInfo{};
-            imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-            imageInfo.imageView = mTextureImageView;
-            imageInfo.sampler = mTextureSampler;
+            VkDescriptorImageInfo cubeImageInfo{};
+            cubeImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            cubeImageInfo.imageView = mCubeTextureImageView;
+            cubeImageInfo.sampler = mCubeTextureSampler;
+
+            VkDescriptorImageInfo floorImageInfo{};
+            floorImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            floorImageInfo.imageView = mFloorTextureImageView;
+            floorImageInfo.sampler = mFloorTextureSampler;
 
             VkDescriptorImageInfo shadowMapInfo{};
             shadowMapInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -1039,7 +1064,7 @@ private:
             cubeDescriptorWrites[1].dstArrayElement = 0;
             cubeDescriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
             cubeDescriptorWrites[1].descriptorCount = 1;
-            cubeDescriptorWrites[1].pImageInfo = &imageInfo;
+            cubeDescriptorWrites[1].pImageInfo = &cubeImageInfo;
 
             cubeDescriptorWrites[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
             cubeDescriptorWrites[2].dstSet = mCubeDescriptorSets[i];
@@ -1048,10 +1073,11 @@ private:
             cubeDescriptorWrites[2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
             cubeDescriptorWrites[2].descriptorCount = 1;
             cubeDescriptorWrites[2].pImageInfo = &shadowMapInfo;
+
             vkUpdateDescriptorSets(logicalDevice, static_cast<uint32_t>(cubeDescriptorWrites.size()), 
                 cubeDescriptorWrites.data(), 0, nullptr);
             
-            std::array<VkWriteDescriptorSet, 2> FloorDescriptorWrites{};
+            std::array<VkWriteDescriptorSet, 3> FloorDescriptorWrites{};
             FloorDescriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
             FloorDescriptorWrites[0].dstSet = mFloorDescriptorSets[i];
             FloorDescriptorWrites[0].dstBinding = 0;
@@ -1068,8 +1094,16 @@ private:
             FloorDescriptorWrites[1].dstArrayElement = 0;
             FloorDescriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
             FloorDescriptorWrites[1].descriptorCount = 1;
-            FloorDescriptorWrites[1].pImageInfo = &shadowMapInfo; // Optional
-            FloorDescriptorWrites[1].pTexelBufferView = nullptr; // Optional
+            FloorDescriptorWrites[1].pImageInfo = &floorImageInfo;
+
+            FloorDescriptorWrites[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            FloorDescriptorWrites[2].dstSet = mFloorDescriptorSets[i];
+            FloorDescriptorWrites[2].dstBinding = 2;
+            FloorDescriptorWrites[2].dstArrayElement = 0;
+            FloorDescriptorWrites[2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            FloorDescriptorWrites[2].descriptorCount = 1;
+            FloorDescriptorWrites[2].pImageInfo = &shadowMapInfo; // Optional
+            FloorDescriptorWrites[2].pTexelBufferView = nullptr; // Optional
             vkUpdateDescriptorSets(logicalDevice, static_cast<uint32_t>(FloorDescriptorWrites.size()), 
                 FloorDescriptorWrites.data(), 0, nullptr);
 
@@ -1286,9 +1320,9 @@ private:
         instance.endSingleTimeCommands(commandBuffer);
     }
 
-    void createTextureImage(const VkDevice& logicalDevice) {
+    void createCubeTextureImage(const VkDevice& logicalDevice) {
         int texWidth, texHeight, texChannels;
-        stbi_uc* pixels = stbi_load(TEXTURE_PATH.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+        stbi_uc* pixels = stbi_load(CUBE_TEXTURE_PATH.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
         mMipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(texWidth, texHeight)))) + 1;
         VkDeviceSize imageSize = texWidth * texHeight * 4;
 
@@ -1306,21 +1340,55 @@ private:
         stbi_image_free(pixels);
 
         createImage(logicalDevice, texWidth, texHeight, mMipLevels, VK_SAMPLE_COUNT_1_BIT, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL,
-        VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, mTextureImage, mTextureImageMemory);
-    
-        transitionImageLayout(mVulkanInstance, mTextureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, mMipLevels);
-        copyBufferToImage(mVulkanInstance, stagingBuffer, mTextureImage, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
-        generateMipmaps(mVulkanInstance, mTextureImage, VK_FORMAT_R8G8B8A8_SRGB, texWidth, texHeight, mMipLevels);
+        VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, mCubeTextureImage, mCubeTextureImageMemory);
+
+        transitionImageLayout(mVulkanInstance, mCubeTextureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, mMipLevels);
+        copyBufferToImage(mVulkanInstance, stagingBuffer, mCubeTextureImage, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
+        generateMipmaps(mVulkanInstance, mCubeTextureImage, VK_FORMAT_R8G8B8A8_SRGB, texWidth, texHeight, mMipLevels);
+
+        vkDestroyBuffer(logicalDevice, stagingBuffer, nullptr);
+        vkFreeMemory(logicalDevice, stagingBufferMemory, nullptr);
+    }
+
+    void createFloorTextureImage(const VkDevice& logicalDevice) {
+        int texWidth, texHeight, texChannels;
+        stbi_uc* pixels = stbi_load(FLOOR_TEXTURE_PATH.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+        mMipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(texWidth, texHeight)))) + 1;
+        VkDeviceSize imageSize = texWidth * texHeight * 4;
+
+        if (!pixels) {
+            throw std::runtime_error("failed to load texture image!");
+        }
+
+        VkBuffer stagingBuffer;
+        VkDeviceMemory stagingBufferMemory;
+        mVulkanInstance.createBuffer(imageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
+        void* data;
+        vkMapMemory(logicalDevice, stagingBufferMemory, 0, imageSize, 0, &data);
+        memcpy(data, pixels, static_cast<size_t>(imageSize));
+        vkUnmapMemory(logicalDevice, stagingBufferMemory);
+        stbi_image_free(pixels);
+
+        createImage(logicalDevice, texWidth, texHeight, mMipLevels, VK_SAMPLE_COUNT_1_BIT, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL,
+        VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, mFloorTextureImage, mFloorTextureImageMemory);
+
+        transitionImageLayout(mVulkanInstance, mFloorTextureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, mMipLevels);
+        copyBufferToImage(mVulkanInstance, stagingBuffer, mFloorTextureImage, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
+        generateMipmaps(mVulkanInstance, mFloorTextureImage, VK_FORMAT_R8G8B8A8_SRGB, texWidth, texHeight, mMipLevels);
              
         vkDestroyBuffer(logicalDevice, stagingBuffer, nullptr);
         vkFreeMemory(logicalDevice, stagingBufferMemory, nullptr);
     }
 
-    void createTextureImageView(VkDevice logicalDevice) {
-        mTextureImageView = createImageView(logicalDevice, mTextureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT, mMipLevels);
+    void createCubeTextureImageView(VkDevice logicalDevice) {
+        mCubeTextureImageView = createImageView(logicalDevice, mCubeTextureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT, mMipLevels);
     }
 
-    void createTextureSampler(const VkPhysicalDevice& physicalDevice, const VkDevice& logicalDevice) {
+    void createFloorTextureImageView(VkDevice logicalDevice) {
+        mFloorTextureImageView = createImageView(logicalDevice, mFloorTextureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT, mMipLevels);
+    }
+
+    void createCubeTextureSampler(const VkPhysicalDevice& physicalDevice, const VkDevice& logicalDevice) {
         VkSamplerCreateInfo samplerInfo{};
         samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
         samplerInfo.magFilter = VK_FILTER_LINEAR;
@@ -1340,9 +1408,56 @@ private:
         samplerInfo.mipLodBias = 0.0f;
         samplerInfo.minLod = 0.0F;
         samplerInfo.maxLod = VK_LOD_CLAMP_NONE;
-        if (vkCreateSampler(logicalDevice, &samplerInfo, nullptr, &mTextureSampler) != VK_SUCCESS) {
+        if (vkCreateSampler(logicalDevice, &samplerInfo, nullptr, &mCubeTextureSampler) != VK_SUCCESS) {
             throw std::runtime_error("failed to create texture sampler!");
         }
+    }
+
+    void createFloorTextureSampler(const VkPhysicalDevice& physicalDevice, const VkDevice& logicalDevice) {
+        VkSamplerCreateInfo samplerInfo{};
+        samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+        samplerInfo.magFilter = VK_FILTER_LINEAR;
+        samplerInfo.minFilter = VK_FILTER_LINEAR;
+        samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        samplerInfo.anisotropyEnable = VK_TRUE;
+        VkPhysicalDeviceProperties properties{};
+        vkGetPhysicalDeviceProperties(physicalDevice, &properties);
+        samplerInfo.maxAnisotropy = properties.limits.maxSamplerAnisotropy;
+        samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
+        samplerInfo.unnormalizedCoordinates = VK_FALSE;
+        samplerInfo.compareEnable = VK_FALSE;
+        samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
+        samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+        samplerInfo.mipLodBias = 0.0f;
+        samplerInfo.minLod = 0.0F;
+        samplerInfo.maxLod = VK_LOD_CLAMP_NONE;
+        if (vkCreateSampler(logicalDevice, &samplerInfo, nullptr, &mFloorTextureSampler) != VK_SUCCESS) {
+            throw std::runtime_error("failed to create texture sampler!");
+        }
+    }
+
+    void createShadowMapSampler(const VkPhysicalDevice& physicalDevice, const VkDevice& logicalDevice) {
+        VkSamplerCreateInfo samplerInfo{};
+        samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+        samplerInfo.magFilter = VK_FILTER_LINEAR;
+        samplerInfo.minFilter = VK_FILTER_LINEAR;
+        samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        samplerInfo.anisotropyEnable = VK_TRUE;
+        VkPhysicalDeviceProperties properties{};
+        vkGetPhysicalDeviceProperties(physicalDevice, &properties);
+        samplerInfo.maxAnisotropy = properties.limits.maxSamplerAnisotropy;
+        samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
+        samplerInfo.unnormalizedCoordinates = VK_FALSE;
+        samplerInfo.compareEnable = VK_FALSE;
+        samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
+        samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+        samplerInfo.mipLodBias = 0.0f;
+        samplerInfo.minLod = 0.0F;
+        samplerInfo.maxLod = VK_LOD_CLAMP_NONE;
         if (vkCreateSampler(logicalDevice, &samplerInfo, nullptr, &mShadowMapSampler) != VK_SUCCESS) {
             throw std::runtime_error("failed to create texture sampler!");
         }
@@ -1415,9 +1530,13 @@ private:
         createColorResources(mVulkanInstance.getLogicalDevice());
         createDepthResources(mVulkanInstance.getPhysicalDevice(), mVulkanInstance.getLogicalDevice());
         createFramebuffers(mVulkanInstance.getLogicalDevice());
-        createTextureImage(mVulkanInstance.getLogicalDevice());
-        createTextureImageView(mVulkanInstance.getLogicalDevice());
-        createTextureSampler(mVulkanInstance.getPhysicalDevice(), mVulkanInstance.getLogicalDevice());
+        createCubeTextureImage(mVulkanInstance.getLogicalDevice());
+        createCubeTextureImageView(mVulkanInstance.getLogicalDevice());
+        createCubeTextureSampler(mVulkanInstance.getPhysicalDevice(), mVulkanInstance.getLogicalDevice());
+        createFloorTextureImage(mVulkanInstance.getLogicalDevice());
+        createFloorTextureImageView(mVulkanInstance.getLogicalDevice());
+        createFloorTextureSampler(mVulkanInstance.getPhysicalDevice(), mVulkanInstance.getLogicalDevice());
+        createShadowMapSampler(mVulkanInstance.getPhysicalDevice(), mVulkanInstance.getLogicalDevice());
         loadCube();
         loadFloor();
         createUniformBuffers(mVulkanInstance.getLogicalDevice());
@@ -1666,10 +1785,14 @@ private:
             vkDestroyBuffer(logicalDevice, mShadowMapUniformBuffers[i], nullptr);
             vkFreeMemory(logicalDevice, mShadowMapUniformBuffersMemory[i], nullptr);
         }
-        vkDestroySampler(logicalDevice, mTextureSampler, nullptr);
-        vkDestroyImageView(logicalDevice, mTextureImageView, nullptr);
-        vkDestroyImage(logicalDevice, mTextureImage, nullptr);
-        vkFreeMemory(logicalDevice, mTextureImageMemory, nullptr);
+        vkDestroySampler(logicalDevice, mCubeTextureSampler, nullptr);
+        vkDestroyImageView(logicalDevice, mCubeTextureImageView, nullptr);
+        vkDestroyImage(logicalDevice, mCubeTextureImage, nullptr);
+        vkFreeMemory(logicalDevice, mCubeTextureImageMemory, nullptr);
+        vkDestroySampler(logicalDevice, mFloorTextureSampler, nullptr);
+        vkDestroyImageView(logicalDevice, mFloorTextureImageView, nullptr);
+        vkDestroyImage(logicalDevice, mFloorTextureImage, nullptr);
+        vkFreeMemory(logicalDevice, mFloorTextureImageMemory, nullptr);
 
         vkDestroyDescriptorPool(logicalDevice, mDescriptorPool, nullptr);
         vkDestroyDescriptorSetLayout(logicalDevice, mCubeDescriptorSetLayout, nullptr);
@@ -1725,10 +1848,14 @@ private:
     Cube mCube;
     Floor mFloor;
     uint32_t mMipLevels;
-    VkImage mTextureImage;
-    VkImageView mTextureImageView;
-    VkSampler mTextureSampler;
-    VkDeviceMemory mTextureImageMemory;
+    VkImage mCubeTextureImage;
+    VkImageView mCubeTextureImageView;
+    VkSampler mCubeTextureSampler;
+    VkDeviceMemory mCubeTextureImageMemory;
+    VkImage mFloorTextureImage;
+    VkImageView mFloorTextureImageView;
+    VkSampler mFloorTextureSampler;
+    VkDeviceMemory mFloorTextureImageMemory;
     VkImage mDepthImage;
     VkDeviceMemory mDepthImageMemory;
     VkImageView mDepthImageView;

@@ -239,10 +239,7 @@ bool VulkanInstance::isDeviceSuitable(VkPhysicalDevice device)
     vkGetPhysicalDeviceProperties2(device, &deviceProperties2);
 
     std::string deviceName(deviceProperties2.properties.deviceName);
-    // Intel driver crashes when using multisampled framebuffer
-    if (deviceName.find("Intel") != std::string::npos) {
-        return false;
-    }
+
     // 3. Print the driver information
     std::cout << "Device Name: " << deviceProperties2.properties.deviceName << std::endl;
     std::cout << "Driver Name: " << driverProperties.driverName << std::endl;
@@ -264,11 +261,9 @@ bool VulkanInstance::isDeviceSuitable(VkPhysicalDevice device)
     VkPhysicalDeviceSwapchainMaintenance1FeaturesEXT swapchainMaintenance1Features = {};
     swapchainMaintenance1Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SWAPCHAIN_MAINTENANCE_1_FEATURES_EXT;
     supportedFeatures2.pNext = &swapchainMaintenance1Features;
-    VkPhysicalDeviceFeatures supportedFeatures;
-    supportedFeatures2.features = supportedFeatures;
     vkGetPhysicalDeviceFeatures2(device, &supportedFeatures2);
 
-    return indices.isComplete() && extensionsSupported && swapChainAdequate && supportedFeatures.samplerAnisotropy && swapchainMaintenance1Features.swapchainMaintenance1 == VK_TRUE;
+    return indices.isComplete() && extensionsSupported && swapChainAdequate && supportedFeatures2.features.samplerAnisotropy && swapchainMaintenance1Features.swapchainMaintenance1 == VK_TRUE;
 }
 
 
