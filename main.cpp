@@ -60,25 +60,6 @@ struct SwapChainSupportDetails
     std::vector<VkPresentModeKHR> presentModes;
 };
 
-static std::vector<char> readFile(const std::string &filename)
-{
-    std::ifstream file(filename, std::ios::ate | std::ios::binary);
-
-    if (!file.is_open())
-    {
-        throw std::runtime_error("failed to open file!");
-    }
-
-    size_t fileSize = (size_t)file.tellg();
-    std::vector<char> buffer(fileSize);
-
-    file.seekg(0);
-    file.read(buffer.data(), fileSize);
-    file.close();
-
-    return buffer;
-}
-
 namespace std {
     template<> struct hash<Vertex> {
         size_t operator()(Vertex const& vertex) const {
@@ -547,172 +528,8 @@ private:
         createColorResources(logicalDevice);
         createDepthResources(physicalDevice, logicalDevice);
         createFramebuffers(logicalDevice);
-        createGraphicsPipeline(logicalDevice);
-    }
-
-    void createGraphicsPipeline(const VkDevice& logicalDevice)
-    {
-        auto cubeVertShaderCode = readFile("shaders/cubeVert.spv");
-        auto cubeFragShaderCode = readFile("shaders/cubeFrag.spv");
-
-        VkShaderModule cubeVertShaderModule = mVulkanInstance.createShaderModule(cubeVertShaderCode);
-        VkShaderModule cubeFragShaderModule = mVulkanInstance.createShaderModule(cubeFragShaderCode);
-        VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
-        vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-        vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
-        vertShaderStageInfo.module = cubeVertShaderModule;
-        vertShaderStageInfo.pName = "main";
-        VkPipelineShaderStageCreateInfo fragShaderStageInfo{};
-        fragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-        fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-        fragShaderStageInfo.module = cubeFragShaderModule;
-        fragShaderStageInfo.pName = "main";
-        VkPipelineShaderStageCreateInfo cubeShaderStages[] = {vertShaderStageInfo, fragShaderStageInfo};
-
-        VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
-        vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-        auto bindingDescription = Vertex::getBindingDescription();
-        vertexInputInfo.vertexBindingDescriptionCount = 1;
-        vertexInputInfo.pVertexBindingDescriptions = &bindingDescription;
-        auto vertexAttributeDescription = Vertex::getAttributeDescriptions();
-        vertexInputInfo.vertexAttributeDescriptionCount = 3;
-        vertexInputInfo.pVertexAttributeDescriptions = vertexAttributeDescription.data();
-
-        VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
-        inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-        inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-        inputAssembly.primitiveRestartEnable = VK_FALSE;
-
-        VkViewport viewport{};
-        viewport.x = 0.0f;
-        viewport.y = 0.0f;
-        viewport.width = (float)mSwapChainExtent.width;
-        viewport.height = (float)mSwapChainExtent.height;
-        viewport.minDepth = 0.0f;
-        viewport.maxDepth = 1.0f;
-        VkRect2D scissor{};
-        scissor.offset = {0, 0};
-        scissor.extent = mSwapChainExtent;
-        VkPipelineViewportStateCreateInfo viewportState{};
-        viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-        viewportState.viewportCount = 1;
-        viewportState.pViewports = &viewport;
-        viewportState.scissorCount = 1;
-        viewportState.pScissors = &scissor;
-
-        VkPipelineRasterizationStateCreateInfo rasterizer{};
-        rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-        rasterizer.depthClampEnable = VK_FALSE;
-        rasterizer.rasterizerDiscardEnable = VK_FALSE;
-        rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
-        rasterizer.lineWidth = 1.0f;
-        rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
-        rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
-        rasterizer.depthBiasEnable = VK_FALSE;
-        rasterizer.depthBiasConstantFactor = 0.0f;
-        rasterizer.depthBiasClamp = 0.0f;
-        rasterizer.depthBiasSlopeFactor = 0.0f;
-
-        VkPipelineMultisampleStateCreateInfo multisampling{};
-        multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-        multisampling.sampleShadingEnable = VK_FALSE;
-        multisampling.rasterizationSamples = mVulkanInstance.getMsaaSamples();
-        multisampling.minSampleShading = 1.0f;
-        multisampling.pSampleMask = nullptr;
-        multisampling.alphaToCoverageEnable = VK_FALSE;
-        multisampling.alphaToOneEnable = VK_FALSE;
-
-        VkPipelineColorBlendAttachmentState colorBlendAttachment{};
-        colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-        colorBlendAttachment.blendEnable = VK_FALSE;
-        colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
-        colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO;
-        colorBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
-        colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-        colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
-        colorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
-
-        VkPipelineColorBlendStateCreateInfo colorBlending{};
-        colorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-        colorBlending.logicOpEnable = VK_FALSE;
-        colorBlending.logicOp = VK_LOGIC_OP_COPY;
-        colorBlending.attachmentCount = 1;
-        colorBlending.pAttachments = &colorBlendAttachment;
-        colorBlending.blendConstants[0] = 0.0f;
-        colorBlending.blendConstants[1] = 0.0f;
-        colorBlending.blendConstants[2] = 0.0f;
-        colorBlending.blendConstants[3] = 0.0f;
-
-        VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
-        pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-        pipelineLayoutInfo.setLayoutCount = 1;
-        pipelineLayoutInfo.pSetLayouts = &mCubeDescriptorSetLayout;
-        pipelineLayoutInfo.pushConstantRangeCount = 0;
-        pipelineLayoutInfo.pPushConstantRanges = nullptr;
-        if (vkCreatePipelineLayout(logicalDevice, &pipelineLayoutInfo, nullptr, &mCubePipelineLayout) != VK_SUCCESS)
-        {
-            throw std::runtime_error("failed to create pipeline layout!");
-        }
-
-        pipelineLayoutInfo.pSetLayouts = &mFloorDescriptorSetLayout;
-        if (vkCreatePipelineLayout(logicalDevice, &pipelineLayoutInfo, nullptr, &mFloorPipelineLayout) != VK_SUCCESS)
-        {
-            throw std::runtime_error("failed to create pipeline layout!");
-        }
-
-        VkPipelineDepthStencilStateCreateInfo depthStencil{};
-        depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-        depthStencil.depthTestEnable = VK_TRUE;
-        depthStencil.depthWriteEnable = VK_TRUE;
-        depthStencil.depthCompareOp = VK_COMPARE_OP_LESS;
-        depthStencil.depthBoundsTestEnable = VK_FALSE;
-        depthStencil.minDepthBounds = 0.0f;
-        depthStencil.maxDepthBounds = 1.0f;
-        depthStencil.stencilTestEnable = VK_FALSE;
-        depthStencil.front = {};
-        depthStencil.back = {};
-
-        VkGraphicsPipelineCreateInfo pipelineInfo{};
-        pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-        pipelineInfo.stageCount = 2;
-        pipelineInfo.pStages = cubeShaderStages;
-        pipelineInfo.pVertexInputState = &vertexInputInfo;
-        pipelineInfo.pInputAssemblyState = &inputAssembly;
-        pipelineInfo.pViewportState = &viewportState;
-        pipelineInfo.pRasterizationState = &rasterizer;
-        pipelineInfo.pMultisampleState = &multisampling;
-        pipelineInfo.pDepthStencilState = &depthStencil;
-        pipelineInfo.pColorBlendState = &colorBlending;
-        pipelineInfo.pDynamicState = nullptr;
-        pipelineInfo.layout = mCubePipelineLayout;
-        pipelineInfo.renderPass = mRenderPass;
-        pipelineInfo.subpass = 0;
-        pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
-        pipelineInfo.basePipelineIndex = -1;
-        if (vkCreateGraphicsPipelines(logicalDevice, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &mCubeGraphicsPipeline) != VK_SUCCESS)
-        {
-            throw std::runtime_error("failed to create graphics pipeline!");
-        }
-
-        auto floorVertShaderCode = readFile("shaders/floorVert.spv");
-        auto floorFragShaderCode = readFile("shaders/floorFrag.spv");
-        VkShaderModule floorVertShaderModule = mVulkanInstance.createShaderModule(floorVertShaderCode);
-        VkShaderModule floorFragShaderModule = mVulkanInstance.createShaderModule(floorFragShaderCode);
-        vertShaderStageInfo.module = floorVertShaderModule;
-        fragShaderStageInfo.module = floorFragShaderModule;
-        VkPipelineShaderStageCreateInfo floorShaderStages[] = {vertShaderStageInfo, fragShaderStageInfo}; 
-        pipelineInfo.layout = mFloorPipelineLayout;
-        pipelineInfo.pStages = floorShaderStages;
-        if (vkCreateGraphicsPipelines(logicalDevice, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &mFloorGraphicsPipeline) != VK_SUCCESS)
-        {
-            throw std::runtime_error("failed to create graphics pipeline!");
-        }
-
-
-        vkDestroyShaderModule(logicalDevice, cubeFragShaderModule, nullptr);
-        vkDestroyShaderModule(logicalDevice, cubeVertShaderModule, nullptr);
-        vkDestroyShaderModule(logicalDevice, floorFragShaderModule, nullptr);
-        vkDestroyShaderModule(logicalDevice, floorVertShaderModule, nullptr);
+        mCube.createGraphicsPipeline(mVulkanInstance, mSwapChainExtent, mRenderPass, &mCubeDescriptorSetLayout);
+        mFloor.createGraphicsPipeline(mVulkanInstance, mSwapChainExtent, mRenderPass, &mFloorDescriptorSetLayout);
     }
 
     void createShadowMapGraphicsPipeline(const VkDevice& logicalDevice)
@@ -1529,7 +1346,6 @@ private:
         createRenderPass(mVulkanInstance.getPhysicalDevice(), mVulkanInstance.getLogicalDevice());
         createDescriptorSetLayout(mVulkanInstance.getLogicalDevice());
         createShadowMapGraphicsPipeline(mVulkanInstance.getLogicalDevice());
-        createGraphicsPipeline(mVulkanInstance.getLogicalDevice());
         createColorResources(mVulkanInstance.getLogicalDevice());
         createDepthResources(mVulkanInstance.getPhysicalDevice(), mVulkanInstance.getLogicalDevice());
         createFramebuffers(mVulkanInstance.getLogicalDevice());
@@ -1542,6 +1358,8 @@ private:
         createShadowMapSampler(mVulkanInstance.getPhysicalDevice(), mVulkanInstance.getLogicalDevice());
         loadCube();
         loadFloor();
+        mCube.createGraphicsPipeline(mVulkanInstance, mSwapChainExtent, mRenderPass, &mCubeDescriptorSetLayout);
+        mFloor.createGraphicsPipeline(mVulkanInstance, mSwapChainExtent, mRenderPass, &mFloorDescriptorSetLayout);
         createUniformBuffers(mVulkanInstance.getLogicalDevice());
         createDescriptorPool(mVulkanInstance.getLogicalDevice());
         createDescriptorSets(mVulkanInstance.getLogicalDevice());
@@ -1648,16 +1466,16 @@ private:
         renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
         renderPassInfo.pClearValues = clearValues.data();
         vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
-        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mCubeGraphicsPipeline);
+        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mCube.getGraphicsPipeline());
         vkCmdBindVertexBuffers(commandBuffer, 0, 1, cubeVertexBuffers, offsets);
         vkCmdBindIndexBuffer(commandBuffer, mCube.getIndexBuffer(), 0, VK_INDEX_TYPE_UINT32);
-        vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mCubePipelineLayout, 0, 1, &mCubeDescriptorSets[currentFrameIndex], 0, nullptr);
+        vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mCube.getPipelineLayout(), 0, 1, &mCubeDescriptorSets[currentFrameIndex], 0, nullptr);
         vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(mCube.getIndices().size()), 1, 0, 0, 0);
 
-        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mFloorGraphicsPipeline);
+        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mFloor.getGraphicsPipeline());
         vkCmdBindVertexBuffers(commandBuffer, 0, 1, floorVertexBuffers, offsets);
         vkCmdBindIndexBuffer(commandBuffer, mFloor.getIndexBuffer(), 0, VK_INDEX_TYPE_UINT32);
-        vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mFloorPipelineLayout, 0, 1, &mFloorDescriptorSets[currentFrameIndex], 0, nullptr);
+        vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mFloor.getPipelineLayout(), 0, 1, &mFloorDescriptorSets[currentFrameIndex], 0, nullptr);
         vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(mFloor.getIndices().size()), 1, 0, 0, 0);
 
         vkCmdEndRenderPass(commandBuffer);
@@ -1781,22 +1599,42 @@ private:
 
     void processInput() {
         if (glfwGetKey(mWindow, GLFW_KEY_W) == GLFW_PRESS) {
-            mCamera->translate(glm::vec3(0.0, 0.0, 1.0));
+            mCamera->translate(CameraMovement::FORWARD);
         }
         if (glfwGetKey(mWindow, GLFW_KEY_S) == GLFW_PRESS) {
-            mCamera->translate(glm::vec3(0.0, 0.0, -1.0));
+            mCamera->translate(CameraMovement::BACKWARD);
         }
         if (glfwGetKey(mWindow, GLFW_KEY_A) == GLFW_PRESS) {
-            mCamera->translate(glm::vec3(1.0, 0.0, 0.0));
+            mCamera->translate(CameraMovement::LEFT);
         }
         if (glfwGetKey(mWindow, GLFW_KEY_D) == GLFW_PRESS) {
-            mCamera->translate(glm::vec3(-1.0, 0.0, 0.0));
+            mCamera->translate(CameraMovement::RIGHT);
         }
         if (glfwGetKey(mWindow, GLFW_KEY_R) == GLFW_PRESS) {
-            mCamera->translate(glm::vec3(0.0, 1.0, 0.0));
+            mCamera->translate(CameraMovement::UP);
         }
         if (glfwGetKey(mWindow, GLFW_KEY_F) == GLFW_PRESS) {
-            mCamera->translate(glm::vec3(0.0, -1.0, 0.0));
+            mCamera->translate(CameraMovement::DOWN);
+        }
+
+        if (glfwGetMouseButton(mWindow, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
+            double xpos, ypos;
+            glfwGetCursorPos(mWindow, &xpos, &ypos);
+            if (!mIsLeftMouseButtonPressed) {
+                mIsLeftMouseButtonPressed = true;
+                mMousePos = glm::vec2(xpos, ypos);
+                mMousePosPrev = mMousePos;
+            } else {
+                mMousePosPrev = mMousePos;
+                mMousePos = glm::vec2(xpos, ypos);
+                glm::vec2 delta = mMousePos - mMousePosPrev;
+                if (delta.x != 0 || delta.y != 0) {
+                    mCamera->rotateAroundCameraUpAxis(-delta.x * 0.1);
+                    mCamera->rotateAroundCameraLeftAxis(delta.y * 0.1);
+                }
+            }
+        } else {
+            mIsLeftMouseButtonPressed = false;
         }
     }
 
@@ -1807,8 +1645,6 @@ private:
         vkDestroySampler(logicalDevice, mShadowMapSampler, nullptr);
         mCube.clearResource(mVulkanInstance);
         mFloor.clearResource(mVulkanInstance);
-        vkDestroyPipeline(logicalDevice, mCubeGraphicsPipeline, nullptr);
-        vkDestroyPipeline(logicalDevice, mFloorGraphicsPipeline, nullptr);
         vkDestroyPipeline(logicalDevice, mShadowMapGraphicsPipeline, nullptr);
 
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
@@ -1830,8 +1666,6 @@ private:
         vkDestroyDescriptorSetLayout(logicalDevice, mCubeDescriptorSetLayout, nullptr);
         vkDestroyDescriptorSetLayout(logicalDevice, mFloorDescriptorSetLayout, nullptr);
         vkDestroyDescriptorSetLayout(logicalDevice, mShadowMapDescriptorSetLayout, nullptr);
-        vkDestroyPipelineLayout(logicalDevice, mCubePipelineLayout, nullptr);
-        vkDestroyPipelineLayout(logicalDevice, mFloorPipelineLayout, nullptr);
         vkDestroyPipelineLayout(logicalDevice, mShadowMapPipelineLayout, nullptr);
         vkDestroyRenderPass(logicalDevice, mShadowMapRenderPass, nullptr);
         vkDestroyRenderPass(logicalDevice, mRenderPass, nullptr);
@@ -1864,11 +1698,7 @@ private:
     VkDescriptorSetLayout mCubeDescriptorSetLayout;
     VkDescriptorSetLayout mFloorDescriptorSetLayout;
     VkDescriptorSetLayout mShadowMapDescriptorSetLayout;
-    VkPipelineLayout mCubePipelineLayout;
-    VkPipelineLayout mFloorPipelineLayout;
     VkPipelineLayout mShadowMapPipelineLayout;
-    VkPipeline mCubeGraphicsPipeline;
-    VkPipeline mFloorGraphicsPipeline;
     VkPipeline mShadowMapGraphicsPipeline;
     std::vector<VkFramebuffer> mSwapChainFramebuffers;
     std::vector<VkFramebuffer> mShadowMapFramebuffers;
@@ -1906,6 +1736,9 @@ private:
     std::vector<VkDescriptorSet> mFloorDescriptorSets;
     std::vector<VkDescriptorSet> mShadowMapDescriptorSets;
     Camera* mCamera;
+    glm::vec2 mMousePos;
+    glm::vec2 mMousePosPrev;
+    bool mIsLeftMouseButtonPressed = false;
 };
 
 int main()

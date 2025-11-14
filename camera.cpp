@@ -38,8 +38,30 @@ float Camera::getFar() const {
     return mFar;
 }
 
-void Camera::translate(const glm::vec3 direction) {
-    mPosition = mPosition + direction;
+void Camera::translate(const CameraMovement movement) {
+    switch (movement) {
+        case CameraMovement::FORWARD:
+            mPosition = mPosition + mForward;
+            break;
+        case CameraMovement::BACKWARD:
+            mPosition = mPosition + (-1.0f) * mForward;
+            break;
+        case CameraMovement::UP:
+            mPosition = mPosition + mUp;
+            break;
+        case CameraMovement::DOWN:
+            mPosition = mPosition + (-1.0f) * mUp;
+            break;
+        case CameraMovement::LEFT:
+            mPosition = mPosition + glm::normalize(glm::cross(mUp, mForward));
+            break;
+        case CameraMovement::RIGHT:
+            mPosition = mPosition + (-1.0f) * glm::normalize(glm::cross(mUp, mForward));
+            break;
+        default:
+            // Do not move
+            break;
+    }
 }
 
 void Camera::rotateAroundCameraUpAxis(const float angle) {
@@ -53,7 +75,8 @@ void Camera::rotateAroundCameraUpAxis(const float angle) {
                                                  rotationAxis));
 
     // 2. Perform Matrix * Vector multiplication with vec3 and mat3
-    glm::vec3 vectorAfterRotate = rotationMatrix3 * mForward;
+    mForward = rotationMatrix3 * mForward;
+    mForward = glm::normalize(mForward);
 }
 
 void Camera::rotateAroundCameraLeftAxis(const float angle) {
@@ -64,4 +87,8 @@ void Camera::rotateAroundCameraLeftAxis(const float angle) {
     glm::mat3 rotationMatrix3 = glm::mat3(glm::rotate(glm::mat4(1.0f), 
                                                  glm::radians(angle), 
                                                  rotationAxis));
+
+    // 2. Perform Matrix * Vector multiplication with vec3 and mat3
+    mForward = rotationMatrix3 * mForward;
+    mForward = glm::normalize(mForward);
 }

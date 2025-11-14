@@ -477,6 +477,10 @@ uint32_t VulkanInstance::findMemoryType(uint32_t typeFilter, VkMemoryPropertyFla
     throw std::runtime_error("failed to find suitable memory type!");
 }
 
+VkInstance VulkanInstance::getInstance() const {
+    return mInstance;
+}
+
 VkPhysicalDevice VulkanInstance::getPhysicalDevice() const {
     return mPhysicalDevice;
 }

@@ -2,6 +2,15 @@
 #define CAMERA_HPP
 #include <glm/glm.hpp>
 
+enum class CameraMovement {
+    FORWARD,
+    BACKWARD,
+    UP,
+    DOWN,
+    LEFT,
+    RIGHT
+};
+
 class Camera {
 public:
     Camera(const float swapchainExtentWidth, const float swapchainExtentHeight);
@@ -12,7 +21,7 @@ public:
     float getAspect() const;
     float getNear() const;
     float getFar() const;
-    void translate(const glm::vec3 direction);
+    void translate(const CameraMovement movement);
     void rotateAroundCameraUpAxis(const float angle);
     void rotateAroundCameraLeftAxis(const float angle);
 

@@ -10,10 +10,13 @@ public:
     Cube();
     void createCubeVertexBuffer(VulkanInstance& vulkanInstance);
     void createCubeIndexBuffer(VulkanInstance& vulkanInstance);
+    void createGraphicsPipeline(VulkanInstance& vulkanInstance, const VkExtent2D swapChainExtent, const VkRenderPass renderPass, const VkDescriptorSetLayout* descriptorSetLayout);
     const VkBuffer& getVertexBuffer() const;
     const VkBuffer& getIndexBuffer() const;
     void clearResource(VulkanInstance& vulkanInstance);
     std::vector<uint32_t> getIndices() const;
+    const VkPipeline getGraphicsPipeline() const;
+    const VkPipelineLayout getPipelineLayout() const;
     
 private:
     std::vector<Vertex> mVertices;
@@ -22,5 +25,7 @@ private:
     VkBuffer mIndexBuffer;
     VkDeviceMemory mVertexBufferMemory;
     VkDeviceMemory mIndexBufferMemory;
+    VkPipelineLayout mPipelineLayout;
+    VkPipeline mGraphicsPipeline;
 };
 #endif
