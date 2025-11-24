@@ -1,5 +1,11 @@
 #include "cube.hpp"
+#include "utility.hpp"
+#include <stb_image.h>
 #include <string.h>
+
+namespace {
+    const std::string CUBE_TEXTURE_PATH = "textures/Texturelabs_Wood_134M.jpg";
+}
 
 Cube::Cube() {
             // Face 1
@@ -213,8 +219,7 @@ void Cube::createCubeIndexBuffer(VulkanInstance& vulkanInstance) {
 
 void Cube::createGraphicsPipeline(VulkanInstance& vulkanInstance,
                                     const VkExtent2D swapChainExtent,
-                                    const VkRenderPass renderPass,
-                                    const VkDescriptorSetLayout* descriptorSetLayout) {
+                                    const VkRenderPass renderPass) {
     auto cubeVertShaderCode = readFile("shaders/lambertVert.spv");
     auto cubeFragShaderCode = readFile("shaders/lambertFrag.spv");
 
@@ -309,7 +314,7 @@ void Cube::createGraphicsPipeline(VulkanInstance& vulkanInstance,
     VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
     pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     pipelineLayoutInfo.setLayoutCount = 1;
-    pipelineLayoutInfo.pSetLayouts = descriptorSetLayout;
+    pipelineLayoutInfo.pSetLayouts = &mCubeDescriptorSetLayout;
     pipelineLayoutInfo.pushConstantRangeCount = 0;
     pipelineLayoutInfo.pPushConstantRanges = nullptr;
     if (vkCreatePipelineLayout(vulkanInstance.getLogicalDevice(), &pipelineLayoutInfo, nullptr, &mPipelineLayout) != VK_SUCCESS)
@@ -355,6 +360,160 @@ void Cube::createGraphicsPipeline(VulkanInstance& vulkanInstance,
     vkDestroyShaderModule(vulkanInstance.getLogicalDevice(), cubeVertShaderModule, nullptr);
 }
 
+void Cube::createCubeTextureImage(VulkanInstance& vulkanInstance) {
+    int texWidth, texHeight, texChannels;
+    stbi_uc* pixels = stbi_load(CUBE_TEXTURE_PATH.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+    mMipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(texWidth, texHeight)))) + 1;
+    VkDeviceSize imageSize = texWidth * texHeight * 4;
+
+    if (!pixels) {
+        throw std::runtime_error("failed to load texture image!");
+    }
+
+    VkBuffer stagingBuffer;
+    VkDeviceMemory stagingBufferMemory;
+    vulkanInstance.createBuffer(imageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
+    void* data;
+    vkMapMemory(vulkanInstance.getLogicalDevice(), stagingBufferMemory, 0, imageSize, 0, &data);
+    memcpy(data, pixels, static_cast<size_t>(imageSize));
+    vkUnmapMemory(vulkanInstance.getLogicalDevice(), stagingBufferMemory);
+    stbi_image_free(pixels);
+
+    createImage(vulkanInstance, vulkanInstance.getLogicalDevice(), texWidth, texHeight, mMipLevels, VK_SAMPLE_COUNT_1_BIT, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL,
+    VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, mCubeTextureImage, mCubeTextureImageMemory);
+
+    transitionImageLayout(vulkanInstance, mCubeTextureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, mMipLevels);
+    copyBufferToImage(vulkanInstance, stagingBuffer, mCubeTextureImage, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
+    generateMipmaps(vulkanInstance, mCubeTextureImage, VK_FORMAT_R8G8B8A8_SRGB, texWidth, texHeight, mMipLevels);
+
+    vkDestroyBuffer(vulkanInstance.getLogicalDevice(), stagingBuffer, nullptr);
+    vkFreeMemory(vulkanInstance.getLogicalDevice(), stagingBufferMemory, nullptr);
+}
+
+void Cube::createCubeTextureImageView(VulkanInstance& vulkanInstance) {
+    mCubeTextureImageView = createImageView(vulkanInstance.getLogicalDevice(), mCubeTextureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT, mMipLevels);
+}
+
+void Cube::createCubeTextureSampler(VulkanInstance& vulkanInstance) {
+        VkSamplerCreateInfo samplerInfo{};
+        samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+        samplerInfo.magFilter = VK_FILTER_LINEAR;
+        samplerInfo.minFilter = VK_FILTER_LINEAR;
+        samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        samplerInfo.anisotropyEnable = VK_TRUE;
+        VkPhysicalDeviceProperties properties{};
+        vkGetPhysicalDeviceProperties(vulkanInstance.getPhysicalDevice(), &properties);
+        samplerInfo.maxAnisotropy = properties.limits.maxSamplerAnisotropy;
+        samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
+        samplerInfo.unnormalizedCoordinates = VK_FALSE;
+        samplerInfo.compareEnable = VK_FALSE;
+        samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
+        samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+        samplerInfo.mipLodBias = 0.0f;
+        samplerInfo.minLod = 0.0F;
+        samplerInfo.maxLod = VK_LOD_CLAMP_NONE;
+        if (vkCreateSampler(vulkanInstance.getLogicalDevice(), &samplerInfo, nullptr, &mCubeTextureSampler) != VK_SUCCESS) {
+            throw std::runtime_error("failed to create texture sampler!");
+        }
+}
+
+void Cube::createDescriptorSetLayout(VulkanInstance& vulkanInstance) {
+    std::vector<VkDescriptorSetLayoutBinding> cubeUniformBindings;
+    cubeUniformBindings.resize(3);
+
+    cubeUniformBindings[0].binding = 0;
+    cubeUniformBindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    cubeUniformBindings[0].descriptorCount = 1;
+    cubeUniformBindings[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+    cubeUniformBindings[0].pImmutableSamplers = nullptr;
+
+    cubeUniformBindings[1].binding = 1;
+    cubeUniformBindings[1].descriptorCount = 1;
+    cubeUniformBindings[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    cubeUniformBindings[1].pImmutableSamplers = nullptr;
+    cubeUniformBindings[1].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+    cubeUniformBindings[2].binding = 2;
+    cubeUniformBindings[2].descriptorCount = 1;
+    cubeUniformBindings[2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    cubeUniformBindings[2].pImmutableSamplers = nullptr;
+    cubeUniformBindings[2].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+    VkDescriptorSetLayoutCreateInfo layoutInfo{};
+    layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    layoutInfo.bindingCount = static_cast<uint32_t>(cubeUniformBindings.size());
+    layoutInfo.pBindings = cubeUniformBindings.data();
+    if (vkCreateDescriptorSetLayout(vulkanInstance.getLogicalDevice(), &layoutInfo, nullptr, &mCubeDescriptorSetLayout) != VK_SUCCESS) {
+        throw std::runtime_error("failed to create cube descriptor set layout!");
+    }
+}
+
+void Cube::createDescriptorSets(VulkanInstance& vulkanInstance,
+                                const uint8_t count, VkDescriptorPool& descriptorPool,
+                                const std::vector<VkBuffer>& uniformBuffers, const VkDeviceSize uboSize,
+                                const std::vector<VkImageView>& shadowMapImageViews,
+                                const VkSampler& shadowMapSampler) {
+    std::vector<VkDescriptorSetLayout> cubeLayouts(count, mCubeDescriptorSetLayout);
+    VkDescriptorSetAllocateInfo allocInfo{};
+    allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    allocInfo.descriptorPool = descriptorPool;
+    allocInfo.descriptorSetCount = static_cast<uint32_t>(count);
+    allocInfo.pSetLayouts = cubeLayouts.data();
+    mCubeDescriptorSets.resize(count);
+    if(vkAllocateDescriptorSets(vulkanInstance.getLogicalDevice(), &allocInfo, mCubeDescriptorSets.data()) != VK_SUCCESS) {
+        throw std::runtime_error("failed to allocate cube descriptor sets!");
+    }
+
+    for (size_t i = 0; i < count; i++) {
+        VkDescriptorBufferInfo bufferInfo{};
+        bufferInfo.buffer = uniformBuffers[i];
+        bufferInfo.offset = 0;
+        bufferInfo.range = uboSize;
+
+        VkDescriptorImageInfo cubeImageInfo{};
+        cubeImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        cubeImageInfo.imageView = mCubeTextureImageView;
+        cubeImageInfo.sampler = mCubeTextureSampler;
+
+        VkDescriptorImageInfo shadowMapInfo{};
+        shadowMapInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        shadowMapInfo.imageView = shadowMapImageViews[i];
+        shadowMapInfo.sampler = shadowMapSampler;
+
+        std::array<VkWriteDescriptorSet, 3> cubeDescriptorWrites{};
+        cubeDescriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        cubeDescriptorWrites[0].dstSet = mCubeDescriptorSets[i];
+        cubeDescriptorWrites[0].dstBinding = 0;
+        cubeDescriptorWrites[0].dstArrayElement = 0;
+        cubeDescriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        cubeDescriptorWrites[0].descriptorCount = 1;
+        cubeDescriptorWrites[0].pBufferInfo = &bufferInfo;
+        cubeDescriptorWrites[0].pImageInfo = nullptr; // Optional
+        cubeDescriptorWrites[0].pTexelBufferView = nullptr; // Optional
+
+        cubeDescriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        cubeDescriptorWrites[1].dstSet = mCubeDescriptorSets[i];
+        cubeDescriptorWrites[1].dstBinding = 1;
+        cubeDescriptorWrites[1].dstArrayElement = 0;
+        cubeDescriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        cubeDescriptorWrites[1].descriptorCount = 1;
+        cubeDescriptorWrites[1].pImageInfo = &cubeImageInfo;
+
+        cubeDescriptorWrites[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        cubeDescriptorWrites[2].dstSet = mCubeDescriptorSets[i];
+        cubeDescriptorWrites[2].dstBinding = 2;
+        cubeDescriptorWrites[2].dstArrayElement = 0;
+        cubeDescriptorWrites[2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        cubeDescriptorWrites[2].descriptorCount = 1;
+        cubeDescriptorWrites[2].pImageInfo = &shadowMapInfo;
+
+        vkUpdateDescriptorSets(vulkanInstance.getLogicalDevice(), static_cast<uint32_t>(cubeDescriptorWrites.size()),
+            cubeDescriptorWrites.data(), 0, nullptr);
+    }
+}
+
 void Cube::clearResource(VulkanInstance& vulkanInstance) {
     vkDestroyBuffer(vulkanInstance.getLogicalDevice(), mVertexBuffer, nullptr);
     vkFreeMemory(vulkanInstance.getLogicalDevice(), mVertexBufferMemory, nullptr);
@@ -362,6 +521,11 @@ void Cube::clearResource(VulkanInstance& vulkanInstance) {
     vkFreeMemory(vulkanInstance.getLogicalDevice(), mIndexBufferMemory, nullptr);
     vkDestroyPipelineLayout(vulkanInstance.getLogicalDevice(), mPipelineLayout, nullptr);
     vkDestroyPipeline(vulkanInstance.getLogicalDevice(), mGraphicsPipeline, nullptr);
+    vkDestroyImage(vulkanInstance.getLogicalDevice(), mCubeTextureImage, nullptr);
+    vkFreeMemory(vulkanInstance.getLogicalDevice(), mCubeTextureImageMemory, nullptr);
+    vkDestroyImageView(vulkanInstance.getLogicalDevice(), mCubeTextureImageView, nullptr);
+    vkDestroySampler(vulkanInstance.getLogicalDevice(), mCubeTextureSampler, nullptr);
+    vkDestroyDescriptorSetLayout(vulkanInstance.getLogicalDevice(), mCubeDescriptorSetLayout, nullptr);
 }
 
 const VkBuffer& Cube::getVertexBuffer() const {
@@ -370,6 +534,18 @@ const VkBuffer& Cube::getVertexBuffer() const {
 
 const VkBuffer& Cube::getIndexBuffer() const {
     return mIndexBuffer;
+}
+
+const VkImage& Cube::getCubeTextureImage() const {
+    return mCubeTextureImage;
+}
+
+const VkImageView& Cube::getCubeTextureImageView() const {
+    return mCubeTextureImageView;
+}
+
+const VkSampler& Cube::getCubeTextureSampler() const {
+    return mCubeTextureSampler;
 }
 
 std::vector<uint32_t> Cube::getIndices() const {
@@ -382,4 +558,8 @@ const VkPipeline Cube::getGraphicsPipeline() const {
 
 const VkPipelineLayout Cube::getPipelineLayout() const {
     return mPipelineLayout;
+}
+
+const std::vector<VkDescriptorSet>& Cube::getDescriptorSets() const {
+    return mCubeDescriptorSets;
 }
