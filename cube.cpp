@@ -7,7 +7,7 @@ namespace {
     const std::string CUBE_TEXTURE_PATH = "textures/Texturelabs_Wood_134M.jpg";
 }
 
-Cube::Cube() {
+void Cube::initializeObject() {
             // Face 1
         Vertex Face1Vertex1{};
         Face1Vertex1.pos = glm::vec3(1.0, 1.0, 1.0) * 2.0f;
@@ -177,7 +177,7 @@ Cube::Cube() {
         mIndices.push_back(22);
 }
 
-void Cube::createCubeVertexBuffer(VulkanInstance& vulkanInstance) {
+void Cube::createVertexBuffer(VulkanInstance& vulkanInstance) {
     VkDeviceSize vertexBufferSize = sizeof(mVertices[0]) * mVertices.size();
 
     VkBuffer stagingBuffer;
@@ -196,7 +196,7 @@ void Cube::createCubeVertexBuffer(VulkanInstance& vulkanInstance) {
     vkFreeMemory(vulkanInstance.getLogicalDevice(), stagingBufferMemory, nullptr);
 }
 
-void Cube::createCubeIndexBuffer(VulkanInstance& vulkanInstance) {
+void Cube::createIndexBuffer(VulkanInstance& vulkanInstance) {
     VkDeviceSize indexBufferSize = sizeof(mIndices[0]) * mIndices.size();
     VkBuffer stagingBuffer;
     VkDeviceMemory stagingBufferMemory;
@@ -314,7 +314,7 @@ void Cube::createGraphicsPipeline(VulkanInstance& vulkanInstance,
     VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
     pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     pipelineLayoutInfo.setLayoutCount = 1;
-    pipelineLayoutInfo.pSetLayouts = &mCubeDescriptorSetLayout;
+    pipelineLayoutInfo.pSetLayouts = &mDescriptorSetLayout;
     pipelineLayoutInfo.pushConstantRangeCount = 0;
     pipelineLayoutInfo.pPushConstantRanges = nullptr;
     if (vkCreatePipelineLayout(vulkanInstance.getLogicalDevice(), &pipelineLayoutInfo, nullptr, &mPipelineLayout) != VK_SUCCESS)
@@ -445,7 +445,7 @@ void Cube::createDescriptorSetLayout(VulkanInstance& vulkanInstance) {
     layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
     layoutInfo.bindingCount = static_cast<uint32_t>(cubeUniformBindings.size());
     layoutInfo.pBindings = cubeUniformBindings.data();
-    if (vkCreateDescriptorSetLayout(vulkanInstance.getLogicalDevice(), &layoutInfo, nullptr, &mCubeDescriptorSetLayout) != VK_SUCCESS) {
+    if (vkCreateDescriptorSetLayout(vulkanInstance.getLogicalDevice(), &layoutInfo, nullptr, &mDescriptorSetLayout) != VK_SUCCESS) {
         throw std::runtime_error("failed to create cube descriptor set layout!");
     }
 }
@@ -455,14 +455,14 @@ void Cube::createDescriptorSets(VulkanInstance& vulkanInstance,
                                 const std::vector<VkBuffer>& uniformBuffers, const VkDeviceSize uboSize,
                                 const std::vector<VkImageView>& shadowMapImageViews,
                                 const VkSampler& shadowMapSampler) {
-    std::vector<VkDescriptorSetLayout> cubeLayouts(count, mCubeDescriptorSetLayout);
+    std::vector<VkDescriptorSetLayout> cubeLayouts(count, mDescriptorSetLayout);
     VkDescriptorSetAllocateInfo allocInfo{};
     allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
     allocInfo.descriptorPool = descriptorPool;
     allocInfo.descriptorSetCount = static_cast<uint32_t>(count);
     allocInfo.pSetLayouts = cubeLayouts.data();
-    mCubeDescriptorSets.resize(count);
-    if(vkAllocateDescriptorSets(vulkanInstance.getLogicalDevice(), &allocInfo, mCubeDescriptorSets.data()) != VK_SUCCESS) {
+    mDescriptorSets.resize(count);
+    if(vkAllocateDescriptorSets(vulkanInstance.getLogicalDevice(), &allocInfo, mDescriptorSets.data()) != VK_SUCCESS) {
         throw std::runtime_error("failed to allocate cube descriptor sets!");
     }
 
@@ -484,7 +484,7 @@ void Cube::createDescriptorSets(VulkanInstance& vulkanInstance,
 
         std::array<VkWriteDescriptorSet, 3> cubeDescriptorWrites{};
         cubeDescriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        cubeDescriptorWrites[0].dstSet = mCubeDescriptorSets[i];
+        cubeDescriptorWrites[0].dstSet = mDescriptorSets[i];
         cubeDescriptorWrites[0].dstBinding = 0;
         cubeDescriptorWrites[0].dstArrayElement = 0;
         cubeDescriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -494,7 +494,7 @@ void Cube::createDescriptorSets(VulkanInstance& vulkanInstance,
         cubeDescriptorWrites[0].pTexelBufferView = nullptr; // Optional
 
         cubeDescriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        cubeDescriptorWrites[1].dstSet = mCubeDescriptorSets[i];
+        cubeDescriptorWrites[1].dstSet = mDescriptorSets[i];
         cubeDescriptorWrites[1].dstBinding = 1;
         cubeDescriptorWrites[1].dstArrayElement = 0;
         cubeDescriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
@@ -502,7 +502,7 @@ void Cube::createDescriptorSets(VulkanInstance& vulkanInstance,
         cubeDescriptorWrites[1].pImageInfo = &cubeImageInfo;
 
         cubeDescriptorWrites[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        cubeDescriptorWrites[2].dstSet = mCubeDescriptorSets[i];
+        cubeDescriptorWrites[2].dstSet = mDescriptorSets[i];
         cubeDescriptorWrites[2].dstBinding = 2;
         cubeDescriptorWrites[2].dstArrayElement = 0;
         cubeDescriptorWrites[2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
@@ -515,51 +515,15 @@ void Cube::createDescriptorSets(VulkanInstance& vulkanInstance,
 }
 
 void Cube::clearResource(VulkanInstance& vulkanInstance) {
-    vkDestroyBuffer(vulkanInstance.getLogicalDevice(), mVertexBuffer, nullptr);
-    vkFreeMemory(vulkanInstance.getLogicalDevice(), mVertexBufferMemory, nullptr);
-    vkDestroyBuffer(vulkanInstance.getLogicalDevice(), mIndexBuffer, nullptr);
-    vkFreeMemory(vulkanInstance.getLogicalDevice(), mIndexBufferMemory, nullptr);
-    vkDestroyPipelineLayout(vulkanInstance.getLogicalDevice(), mPipelineLayout, nullptr);
-    vkDestroyPipeline(vulkanInstance.getLogicalDevice(), mGraphicsPipeline, nullptr);
     vkDestroyImage(vulkanInstance.getLogicalDevice(), mCubeTextureImage, nullptr);
     vkFreeMemory(vulkanInstance.getLogicalDevice(), mCubeTextureImageMemory, nullptr);
     vkDestroyImageView(vulkanInstance.getLogicalDevice(), mCubeTextureImageView, nullptr);
     vkDestroySampler(vulkanInstance.getLogicalDevice(), mCubeTextureSampler, nullptr);
-    vkDestroyDescriptorSetLayout(vulkanInstance.getLogicalDevice(), mCubeDescriptorSetLayout, nullptr);
+    Object::clearResource(vulkanInstance);
 }
 
-const VkBuffer& Cube::getVertexBuffer() const {
-    return mVertexBuffer;
-}
-
-const VkBuffer& Cube::getIndexBuffer() const {
-    return mIndexBuffer;
-}
-
-const VkImage& Cube::getCubeTextureImage() const {
-    return mCubeTextureImage;
-}
-
-const VkImageView& Cube::getCubeTextureImageView() const {
-    return mCubeTextureImageView;
-}
-
-const VkSampler& Cube::getCubeTextureSampler() const {
-    return mCubeTextureSampler;
-}
-
-std::vector<uint32_t> Cube::getIndices() const {
-    return mIndices;
-}
-
-const VkPipeline Cube::getGraphicsPipeline() const {
-    return mGraphicsPipeline;
-}
-
-const VkPipelineLayout Cube::getPipelineLayout() const {
-    return mPipelineLayout;
-}
-
-const std::vector<VkDescriptorSet>& Cube::getDescriptorSets() const {
-    return mCubeDescriptorSets;
+void Cube::createTextures(VulkanInstance& vulkanInstance) {
+    createCubeTextureImage(vulkanInstance);
+    createCubeTextureImageView(vulkanInstance);
+    createCubeTextureSampler(vulkanInstance);    
 }

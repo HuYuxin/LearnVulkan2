@@ -457,8 +457,9 @@ private:
         createMultisampleDepthResources(physicalDevice, logicalDevice);
         createShadowMapDepthResources(physicalDevice, logicalDevice);
         createFramebuffers(logicalDevice);
-        mCube.createGraphicsPipeline(mVulkanInstance, mSwapChainExtent, mRenderPass);
-        mFloor.createGraphicsPipeline(mVulkanInstance, mSwapChainExtent, mRenderPass);
+        for (Object* obj : objects) {
+            obj->createGraphicsPipeline(mVulkanInstance, mSwapChainExtent, mRenderPass);
+        }
     }
 
     void createShadowMapGraphicsPipeline(const VkDevice& logicalDevice)
@@ -643,27 +644,23 @@ private:
         }
     }
 
-    void loadCube() {
-        mCube.createCubeVertexBuffer(mVulkanInstance);
-        mCube.createCubeIndexBuffer(mVulkanInstance);
-        mCube.createCubeTextureImage(mVulkanInstance);
-        mCube.createCubeTextureImageView(mVulkanInstance);
-        mCube.createCubeTextureSampler(mVulkanInstance);
-        mCube.createDescriptorSetLayout(mVulkanInstance);
-        mCube.createDescriptorSets(mVulkanInstance, MAX_FRAMES_IN_FLIGHT, mDescriptorPool, mUniformsBuffers, sizeof(UniformBufferObject), mShadowMapImageViews, mShadowMapSampler);
-        mCube.createGraphicsPipeline(mVulkanInstance, mSwapChainExtent, mRenderPass);
+    void loadObjects() {
+        Object* cube = new Cube();
+        objects.push_back(cube);
+        Object* floor = new Floor();
+        objects.push_back(floor);
     }
 
-    void loadFloor()
-    {
-        mFloor.createFloorVertexBuffer(mVulkanInstance);
-        mFloor.createFloorIndexBuffer(mVulkanInstance);
-        mFloor.createFloorTextureImage(mVulkanInstance);
-        mFloor.createFloorTextureImageView(mVulkanInstance);
-        mFloor.createFloorTextureSampler(mVulkanInstance);
-        mFloor.createDescriptorSetLayout(mVulkanInstance);
-        mFloor.createDescriptorSets(mVulkanInstance, MAX_FRAMES_IN_FLIGHT, mDescriptorPool, mUniformsBuffers, sizeof(UniformBufferObject), mShadowMapImageViews, mShadowMapSampler);
-        mFloor.createGraphicsPipeline(mVulkanInstance, mSwapChainExtent, mRenderPass);
+    void initializeObjects() {
+        for (Object* obj : objects) {
+            obj->initializeObject();
+            obj->createVertexBuffer(mVulkanInstance);
+            obj->createIndexBuffer(mVulkanInstance);
+            obj->createTextures(mVulkanInstance);
+            obj->createDescriptorSetLayout(mVulkanInstance);
+            obj->createDescriptorSets(mVulkanInstance, MAX_FRAMES_IN_FLIGHT, mDescriptorPool, mUniformsBuffers, sizeof(UniformBufferObject), mShadowMapImageViews, mShadowMapSampler);
+            obj->createGraphicsPipeline(mVulkanInstance, mSwapChainExtent, mRenderPass);
+        }
     }
 
     struct UniformBufferObject {
@@ -893,8 +890,8 @@ private:
         createShadowMapDescriptorSetLayout(mVulkanInstance.getLogicalDevice());
         createShadowMapDescriptorSets(mVulkanInstance.getLogicalDevice());
         createShadowMapGraphicsPipeline(mVulkanInstance.getLogicalDevice());
-        loadCube();
-        loadFloor();
+        loadObjects();
+        initializeObjects();
         createCommandBuffer(mVulkanInstance.getCommandPool(), mVulkanInstance.getLogicalDevice());
         createSyncObjects(mVulkanInstance.getLogicalDevice());
     }
@@ -930,8 +927,6 @@ private:
 
     void recordCommandBuffer(VkPhysicalDevice physicalDevice, VkCommandBuffer commandBuffer, uint32_t imageIndex, uint32_t currentFrameIndex)
     {
-        VkBuffer cubeVertexBuffers[] = {mCube.getVertexBuffer()};
-        VkBuffer floorVertexBuffers[] = {mFloor.getVertexBuffer()};
         VkDeviceSize offsets[] = {0};
 
         VkCommandBufferBeginInfo beginInfo{};
@@ -956,13 +951,13 @@ private:
         shadowMapRenderPassInfo.pClearValues = &shadowMapClearValue;
         vkCmdBeginRenderPass(commandBuffer, &shadowMapRenderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
         vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mShadowMapGraphicsPipeline);
-        vkCmdBindVertexBuffers(commandBuffer, 0, 1, cubeVertexBuffers, offsets);
-        vkCmdBindIndexBuffer(commandBuffer, mCube.getIndexBuffer(), 0, VK_INDEX_TYPE_UINT32);
         vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mShadowMapPipelineLayout, 0, 1, &mShadowMapDescriptorSets[currentFrameIndex], 0, nullptr);
-        vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(mCube.getIndices().size()), 1, 0, 0, 0);
-        vkCmdBindVertexBuffers(commandBuffer, 0, 1, floorVertexBuffers, offsets);
-        vkCmdBindIndexBuffer(commandBuffer, mFloor.getIndexBuffer(), 0, VK_INDEX_TYPE_UINT32);
-        vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(mFloor.getIndices().size()), 1, 0, 0, 0);
+        for (Object* obj : objects) {
+            VkBuffer vertexBuffers[] = {obj->getVertexBuffer()};
+            vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
+            vkCmdBindIndexBuffer(commandBuffer, obj->getIndexBuffer(), 0, VK_INDEX_TYPE_UINT32);
+            vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(obj->getIndices().size()), 1, 0, 0, 0);
+        }
         vkCmdEndRenderPass(commandBuffer);
 
         VkFormat depthFormat = findDepthFormat(physicalDevice);
@@ -997,18 +992,14 @@ private:
         renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
         renderPassInfo.pClearValues = clearValues.data();
         vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
-        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mCube.getGraphicsPipeline());
-        vkCmdBindVertexBuffers(commandBuffer, 0, 1, cubeVertexBuffers, offsets);
-        vkCmdBindIndexBuffer(commandBuffer, mCube.getIndexBuffer(), 0, VK_INDEX_TYPE_UINT32);
-        vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mCube.getPipelineLayout(), 0, 1, &(mCube.getDescriptorSets()[currentFrameIndex]), 0, nullptr);
-        vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(mCube.getIndices().size()), 1, 0, 0, 0);
-
-        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mFloor.getGraphicsPipeline());
-        vkCmdBindVertexBuffers(commandBuffer, 0, 1, floorVertexBuffers, offsets);
-        vkCmdBindIndexBuffer(commandBuffer, mFloor.getIndexBuffer(), 0, VK_INDEX_TYPE_UINT32);
-        vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mFloor.getPipelineLayout(), 0, 1, &(mFloor.getDescriptorSets()[currentFrameIndex]), 0, nullptr);
-        vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(mFloor.getIndices().size()), 1, 0, 0, 0);
-
+        for (Object* obj : objects) {
+            vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, obj->getGraphicsPipeline());
+            VkBuffer vertexBuffers[] = {obj->getVertexBuffer()};
+            vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
+            vkCmdBindIndexBuffer(commandBuffer, obj->getIndexBuffer(), 0, VK_INDEX_TYPE_UINT32);
+            vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, obj->getPipelineLayout(), 0, 1, &(obj->getDescriptorSets()[currentFrameIndex]), 0, nullptr);
+            vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(obj->getIndices().size()), 1, 0, 0, 0);
+        }
         vkCmdEndRenderPass(commandBuffer);
 
         if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS)
@@ -1173,8 +1164,9 @@ private:
         VkDevice logicalDevice = mVulkanInstance.getLogicalDevice();
         cleanupSwapChain(logicalDevice);
         vkDestroySampler(logicalDevice, mShadowMapSampler, nullptr);
-        mCube.clearResource(mVulkanInstance);
-        mFloor.clearResource(mVulkanInstance);
+        for (Object* obj : objects) {
+            obj->clearResource(mVulkanInstance);
+        }
         vkDestroyPipeline(logicalDevice, mShadowMapGraphicsPipeline, nullptr);
 
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
@@ -1226,8 +1218,9 @@ private:
     std::vector<VkFence> mInFlightFences;
     uint32_t mCurrentFrame = 0;
     bool framebufferResized = false;
-    Cube mCube;
-    Floor mFloor;
+    std::vector<Object*> objects;
+    //Cube mCube;
+    //Floor mFloor;
     VkImage mDepthImage;
     VkDeviceMemory mDepthImageMemory;
     VkImageView mDepthImageView;

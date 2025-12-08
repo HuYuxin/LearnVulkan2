@@ -3,7 +3,7 @@
 #include <stb_image.h>
 #include <string.h>
 
-Floor::Floor(){
+void Floor::initializeObject(){
         // Floor
         Vertex FloorVertex1{};
         FloorVertex1.pos = glm::vec3(-10.0, -2.0, 10.0);
@@ -33,7 +33,7 @@ Floor::Floor(){
         mIndices.push_back(3);
 }
 
-void Floor::createFloorVertexBuffer(VulkanInstance& vulkanInstance) {
+void Floor::createVertexBuffer(VulkanInstance& vulkanInstance) {
     VkDeviceSize vertexBufferSize = sizeof(mVertices[0]) * mVertices.size();
 
     VkBuffer stagingBuffer;
@@ -51,7 +51,7 @@ void Floor::createFloorVertexBuffer(VulkanInstance& vulkanInstance) {
     vkFreeMemory(vulkanInstance.getLogicalDevice(), stagingBufferMemory, nullptr);    
 }
 
-void Floor::createFloorIndexBuffer(VulkanInstance& vulkanInstance) {
+void Floor::createIndexBuffer(VulkanInstance& vulkanInstance) {
     VkDeviceSize indexBufferSize = sizeof(mIndices[0]) * mIndices.size();
     VkBuffer stagingBuffer;
     VkDeviceMemory stagingBufferMemory;
@@ -169,7 +169,7 @@ void Floor::createGraphicsPipeline(VulkanInstance& vulkanInstance,
     VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
     pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     pipelineLayoutInfo.setLayoutCount = 1;
-    pipelineLayoutInfo.pSetLayouts = &mFloorDescriptorSetLayout;
+    pipelineLayoutInfo.pSetLayouts = &mDescriptorSetLayout;
     pipelineLayoutInfo.pushConstantRangeCount = 0;
     pipelineLayoutInfo.pPushConstantRanges = nullptr;
     if (vkCreatePipelineLayout(vulkanInstance.getLogicalDevice(), &pipelineLayoutInfo, nullptr, &mPipelineLayout) != VK_SUCCESS)
@@ -300,7 +300,7 @@ void Floor::createDescriptorSetLayout(VulkanInstance& vulkanInstance) {
     layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
     layoutInfo.bindingCount = static_cast<uint32_t>(floorUniformLayoutBinding.size());
     layoutInfo.pBindings = floorUniformLayoutBinding.data();
-    if (vkCreateDescriptorSetLayout(vulkanInstance.getLogicalDevice(), &layoutInfo, nullptr, &mFloorDescriptorSetLayout) != VK_SUCCESS) {
+    if (vkCreateDescriptorSetLayout(vulkanInstance.getLogicalDevice(), &layoutInfo, nullptr, &mDescriptorSetLayout) != VK_SUCCESS) {
         throw std::runtime_error("failed to create floor descriptor set layout!");
     }
 }
@@ -310,14 +310,14 @@ void Floor::createDescriptorSets(VulkanInstance& vulkanInstance,
                                 const std::vector<VkBuffer>& uniformBuffers, const VkDeviceSize uboSize,
                                 const std::vector<VkImageView>& shadowMapImageViews,
                                 const VkSampler& shadowMapSampler) {
-    std::vector<VkDescriptorSetLayout> floorLayouts(count, mFloorDescriptorSetLayout);
+    std::vector<VkDescriptorSetLayout> floorLayouts(count, mDescriptorSetLayout);
     VkDescriptorSetAllocateInfo allocInfo{};
     allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
     allocInfo.descriptorPool = descriptorPool;
     allocInfo.descriptorSetCount = static_cast<uint32_t>(count);
     allocInfo.pSetLayouts = floorLayouts.data();
-    mFloorDescriptorSets.resize(count);
-    if(vkAllocateDescriptorSets(vulkanInstance.getLogicalDevice(), &allocInfo, mFloorDescriptorSets.data()) != VK_SUCCESS) {
+    mDescriptorSets.resize(count);
+    if(vkAllocateDescriptorSets(vulkanInstance.getLogicalDevice(), &allocInfo, mDescriptorSets.data()) != VK_SUCCESS) {
         throw std::runtime_error("failed to allocate floor descriptor sets!");
     }
 
@@ -339,7 +339,7 @@ void Floor::createDescriptorSets(VulkanInstance& vulkanInstance,
 
         std::array<VkWriteDescriptorSet, 3> FloorDescriptorWrites{};
         FloorDescriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        FloorDescriptorWrites[0].dstSet = mFloorDescriptorSets[i];
+        FloorDescriptorWrites[0].dstSet = mDescriptorSets[i];
         FloorDescriptorWrites[0].dstBinding = 0;
         FloorDescriptorWrites[0].dstArrayElement = 0;
         FloorDescriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -349,7 +349,7 @@ void Floor::createDescriptorSets(VulkanInstance& vulkanInstance,
         FloorDescriptorWrites[0].pTexelBufferView = nullptr; // Optional
 
         FloorDescriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        FloorDescriptorWrites[1].dstSet = mFloorDescriptorSets[i];
+        FloorDescriptorWrites[1].dstSet = mDescriptorSets[i];
         FloorDescriptorWrites[1].dstBinding = 1;
         FloorDescriptorWrites[1].dstArrayElement = 0;
         FloorDescriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
@@ -357,7 +357,7 @@ void Floor::createDescriptorSets(VulkanInstance& vulkanInstance,
         FloorDescriptorWrites[1].pImageInfo = &floorImageInfo;
 
         FloorDescriptorWrites[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        FloorDescriptorWrites[2].dstSet = mFloorDescriptorSets[i];
+        FloorDescriptorWrites[2].dstSet = mDescriptorSets[i];
         FloorDescriptorWrites[2].dstBinding = 2;
         FloorDescriptorWrites[2].dstArrayElement = 0;
         FloorDescriptorWrites[2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
@@ -370,51 +370,15 @@ void Floor::createDescriptorSets(VulkanInstance& vulkanInstance,
 }
 
 void Floor::clearResource(VulkanInstance& vulkanInstance) {
-    vkDestroyBuffer(vulkanInstance.getLogicalDevice(), mVertexBuffer, nullptr);
-    vkFreeMemory(vulkanInstance.getLogicalDevice(), mVertexBufferMemory, nullptr);
-    vkDestroyBuffer(vulkanInstance.getLogicalDevice(), mIndexBuffer, nullptr);
-    vkFreeMemory(vulkanInstance.getLogicalDevice(), mIndexBufferMemory, nullptr);
-    vkDestroyPipelineLayout(vulkanInstance.getLogicalDevice(), mPipelineLayout, nullptr);
-    vkDestroyPipeline(vulkanInstance.getLogicalDevice(), mGraphicsPipeline, nullptr);
     vkDestroyImage(vulkanInstance.getLogicalDevice(), mFloorTextureImage, nullptr);
     vkFreeMemory(vulkanInstance.getLogicalDevice(), mFloorTextureImageMemory, nullptr);
     vkDestroyImageView(vulkanInstance.getLogicalDevice(), mFloorTextureImageView, nullptr);
     vkDestroySampler(vulkanInstance.getLogicalDevice(), mFloorTextureSampler, nullptr);
-    vkDestroyDescriptorSetLayout(vulkanInstance.getLogicalDevice(), mFloorDescriptorSetLayout, nullptr);
+    Object::clearResource(vulkanInstance);
 }
 
-const VkBuffer& Floor::getVertexBuffer() const {
-    return mVertexBuffer;
-}
-
-const VkBuffer& Floor::getIndexBuffer() const {
-    return mIndexBuffer;
-}
-
-std::vector<uint32_t> Floor::getIndices() const {
-    return mIndices;
-}
-
-const VkPipeline Floor::getGraphicsPipeline() const {
-    return mGraphicsPipeline;
-}
-
-const VkPipelineLayout Floor::getPipelineLayout() const {
-    return mPipelineLayout;
-}
-
-const VkImage& Floor::getFloorTextureImage() const {
-    return mFloorTextureImage;
-}
-
-const VkImageView& Floor::getFloorTextureImageView() const {
-    return mFloorTextureImageView;
-}
-
-const VkSampler& Floor::getFloorTextureSampler() const {
-    return mFloorTextureSampler;
-}
-
-const std::vector<VkDescriptorSet>& Floor::getDescriptorSets() const {
-    return mFloorDescriptorSets;
+void Floor::createTextures(VulkanInstance& vulkanInstance) {
+    createFloorTextureImage(vulkanInstance);
+    createFloorTextureImageView(vulkanInstance);
+    createFloorTextureSampler(vulkanInstance);
 }
