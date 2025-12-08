@@ -1,6 +1,6 @@
 #ifndef UTILITY_HPP
 #define UTILITY_HPP
-#include "vulkanInstance.hpp"
+#include "VulkanInstance.hpp"
 #include <vulkan/vulkan_core.h>
 
 

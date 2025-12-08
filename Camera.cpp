@@ -1,4 +1,4 @@
-#include "camera.hpp"
+#include "Camera.hpp"
 #include <glm/gtc/matrix_transform.hpp>
 
 Camera::Camera(const float swapchainExtentWidth, const float swapchainExtentHeight) : mFovY(glm::radians(45.0f)),

@@ -1,4 +1,4 @@
-#include "floor.hpp"
+#include "Floor.hpp"
 #include "utility.hpp"
 #include <stb_image.h>
 #include <string.h>

@@ -1,4 +1,4 @@
-#include "cube.hpp"
+#include "Cube.hpp"
 #include "utility.hpp"
 #include <stb_image.h>
 #include <string.h>

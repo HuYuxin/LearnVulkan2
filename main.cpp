@@ -26,12 +26,12 @@
 #include <vector>
 #include <unordered_map>
 
-#include "camera.hpp"
-#include "cube.hpp"
-#include "floor.hpp"
+#include "Camera.hpp"
+#include "Cube.hpp"
+#include "Floor.hpp"
 #include "utility.hpp"
 #include "Vertex.hpp"
-#include "vulkanInstance.hpp"
+#include "VulkanInstance.hpp"
 
 const uint32_t WIDTH = 800;
 const uint32_t HEIGHT = 600;
@@ -1219,8 +1219,6 @@ private:
     uint32_t mCurrentFrame = 0;
     bool framebufferResized = false;
     std::vector<Object*> objects;
-    //Cube mCube;
-    //Floor mFloor;
     VkImage mDepthImage;
     VkDeviceMemory mDepthImageMemory;
     VkImageView mDepthImageView;

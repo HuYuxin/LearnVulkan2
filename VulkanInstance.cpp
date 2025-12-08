@@ -1,6 +1,6 @@
 #define GLFW_INCLUDE_VULKAN
 #include "string.h"
-#include "vulkanInstance.hpp"
+#include "VulkanInstance.hpp"
 #include <iostream>
 #include <optional>
 #include <set>

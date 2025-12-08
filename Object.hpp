@@ -2,7 +2,7 @@
 #define OBJECT_HPP
 #include <vulkan/vulkan_core.h>
 #include "Vertex.hpp"
-#include "vulkanInstance.hpp"
+#include "VulkanInstance.hpp"
 
 class Object {
 public:
