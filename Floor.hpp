@@ -16,10 +16,9 @@ public:
     virtual void initializeObject() override;
     virtual void createVertexBuffer(VulkanInstance& vulkanInstance) override;
     virtual void createIndexBuffer(VulkanInstance& vulkanInstance) override;
-    virtual void createGraphicsPipeline(VulkanInstance& vulkanInstance, const VkExtent2D swapChainExtent, const VkRenderPass renderPass) override;
-    virtual void createDescriptorSetLayout(VulkanInstance& vulkanInstance) override;
     virtual void createDescriptorSets(VulkanInstance& vulkanInstance,
                                 const uint8_t count, VkDescriptorPool& descriptorPool,
+                                const VkDescriptorSetLayout descriptorSetLayout,
                                 const std::vector<VkBuffer>& uniformBuffers, const VkDeviceSize uboSize,
                                 const std::vector<VkImageView>& shadowMapImageViews,
                                 const VkSampler& shadowMapSampler) override;
