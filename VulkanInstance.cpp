@@ -186,7 +186,7 @@ void VulkanInstance::createVulkanInstance() {
     appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
     appInfo.pEngineName = "No Engine";
     appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
-    appInfo.apiVersion = VK_API_VERSION_1_1;
+    appInfo.apiVersion = VK_API_VERSION_1_4;
 
     uint32_t extensionCount = 0;
     vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, nullptr);
@@ -260,10 +260,17 @@ bool VulkanInstance::isDeviceSuitable(VkPhysicalDevice device)
     supportedFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
     VkPhysicalDeviceSwapchainMaintenance1FeaturesEXT swapchainMaintenance1Features = {};
     swapchainMaintenance1Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SWAPCHAIN_MAINTENANCE_1_FEATURES_EXT;
+
+    VkPhysicalDeviceDynamicRenderingFeatures dynamicRenderingFeature{};
+    dynamicRenderingFeature.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES;
+    swapchainMaintenance1Features.pNext = &dynamicRenderingFeature;
     supportedFeatures2.pNext = &swapchainMaintenance1Features;
     vkGetPhysicalDeviceFeatures2(device, &supportedFeatures2);
 
-    return indices.isComplete() && extensionsSupported && swapChainAdequate && supportedFeatures2.features.samplerAnisotropy && swapchainMaintenance1Features.swapchainMaintenance1 == VK_TRUE;
+    return indices.isComplete() && extensionsSupported && swapChainAdequate
+            && supportedFeatures2.features.samplerAnisotropy
+            && swapchainMaintenance1Features.swapchainMaintenance1 == VK_TRUE
+            && dynamicRenderingFeature.dynamicRendering == VK_TRUE;
 }
 
 
@@ -338,6 +345,9 @@ void VulkanInstance::createLogicalDevice() {
         VkPhysicalDeviceSwapchainMaintenance1FeaturesEXT swapchainMaintenance1Features{};
         swapchainMaintenance1Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SWAPCHAIN_MAINTENANCE_1_FEATURES_EXT;
         swapchainMaintenance1Features.swapchainMaintenance1 = VK_TRUE;
+        VkPhysicalDeviceDynamicRenderingFeatures dynamicRenderingFeature{};
+        dynamicRenderingFeature.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES;
+        dynamicRenderingFeature.dynamicRendering = VK_TRUE;
 
         VkDeviceCreateInfo createInfo{};
         createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
@@ -345,6 +355,7 @@ void VulkanInstance::createLogicalDevice() {
         createInfo.queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size());
         createInfo.pEnabledFeatures = &deviceFeatures;
         createInfo.pNext = &swapchainMaintenance1Features;
+        swapchainMaintenance1Features.pNext = &dynamicRenderingFeature;
         createInfo.enabledExtensionCount = static_cast<uint32_t>(deviceExtensions.size());
         createInfo.ppEnabledExtensionNames = deviceExtensions.data();
         if (mEnableValidationLayer)

@@ -266,6 +266,9 @@ private:
         vkGetSwapchainImagesKHR(logicalDevice, mSwapChain, &imageCount, mSwapChainImages.data());
         mSwapChainImageFormat = surfaceFormat.format;
         mSwapChainExtent = extent;
+        for (auto swapChainImage : mSwapChainImages) {
+            transitionImageLayout(mVulkanInstance, swapChainImage, mSwapChainImageFormat, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, 1);
+        }
     }
 
 
@@ -275,151 +278,6 @@ private:
         for (size_t i = 0; i < mSwapChainImages.size(); ++i)
         {
             mSwapChainImageViews[i] = createImageView(localDevice, mSwapChainImages[i], mSwapChainImageFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
-        }
-    }
-
-    void createShadowMapRenderPass(VkPhysicalDevice physicalDevice, VkDevice logicalDevice)
-    {
-        VkAttachmentDescription depthAttachment{};
-        depthAttachment.format = findDepthFormat(physicalDevice);
-        depthAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
-        depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-        depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-        depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-        depthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        depthAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        depthAttachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-
-        VkAttachmentReference depthAttachmentRef{};
-        depthAttachmentRef.attachment = 0;
-        depthAttachmentRef.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-
-        VkSubpassDescription subpass{};
-        subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-        subpass.colorAttachmentCount = 0;
-        subpass.pColorAttachments = nullptr;
-        subpass.pDepthStencilAttachment = &depthAttachmentRef;
-
-        VkSubpassDependency dependency1{};
-        dependency1.srcSubpass = VK_SUBPASS_EXTERNAL;
-        dependency1.dstSubpass = 0;
-        dependency1.srcStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT;
-        dependency1.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-        dependency1.dstStageMask = VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
-        dependency1.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-
-        VkSubpassDependency dependency2{};
-        dependency2.srcSubpass = 0;
-        dependency2.dstSubpass = VK_SUBPASS_EXTERNAL;
-        dependency2.srcStageMask = VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
-        dependency2.srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-        dependency2.dstStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT;
-        dependency2.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-
-        std::array<VkSubpassDependency, 2> dependencies = {dependency1, dependency2};
-
-        std::array<VkAttachmentDescription, 1> attachments = {depthAttachment};
-        VkRenderPassCreateInfo renderPassInfo{};
-        renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-        renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());;
-        renderPassInfo.pAttachments = attachments.data();
-        renderPassInfo.subpassCount = 1;
-        renderPassInfo.pSubpasses = &subpass;
-        renderPassInfo.dependencyCount = 2;
-        renderPassInfo.pDependencies = dependencies.data();
-
-        if (vkCreateRenderPass(logicalDevice, &renderPassInfo, nullptr, &mShadowMapRenderPass) != VK_SUCCESS)
-        {
-            throw std::runtime_error("failed to create shadow map render pass!");
-        }
-
-    }
-
-    void createRenderPass(VkPhysicalDevice physicalDevice, VkDevice logicalDevice)
-    {
-        VkAttachmentDescription colorAttachment{};
-        colorAttachment.format = mSwapChainImageFormat;
-        colorAttachment.samples = mVulkanInstance.getMsaaSamples();
-        colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-        colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-        colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-        colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        colorAttachment.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-
-        VkAttachmentDescription colorAttachmentResolve{};
-        colorAttachmentResolve.format = mSwapChainImageFormat;
-        colorAttachmentResolve.samples = VK_SAMPLE_COUNT_1_BIT;
-        colorAttachmentResolve.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-        colorAttachmentResolve.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-        colorAttachmentResolve.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-        colorAttachmentResolve.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        colorAttachmentResolve.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        colorAttachmentResolve.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-
-        VkAttachmentReference colorAttachmentRef{};
-        colorAttachmentRef.attachment = 0;
-        colorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-
-        VkAttachmentReference colorAttachmentResolveRef{};
-        colorAttachmentResolveRef.attachment = 2;
-        colorAttachmentResolveRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-
-        VkAttachmentDescription depthAttachment{};
-        depthAttachment.format = findDepthFormat(physicalDevice);
-        depthAttachment.samples = mVulkanInstance.getMsaaSamples();
-        depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-        depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-        depthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        depthAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        depthAttachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-
-        VkAttachmentReference depthAttachmentRef{};
-        depthAttachmentRef.attachment = 1;
-        depthAttachmentRef.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-
-        VkSubpassDescription subpass{};
-        subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-        subpass.colorAttachmentCount = 1;
-        subpass.pColorAttachments = &colorAttachmentRef;
-        subpass.pDepthStencilAttachment = &depthAttachmentRef;
-        subpass.pResolveAttachments = &colorAttachmentResolveRef;
-
-        VkSubpassDependency dependency1{};
-        dependency1.srcSubpass = VK_SUBPASS_EXTERNAL;
-        dependency1.dstSubpass = 0;
-        //dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
-        dependency1.srcStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT;
-        //dependency.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-        dependency1.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-        //dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-        dependency1.dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-        //dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT;
-        dependency1.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-
-        VkSubpassDependency dependency2{};
-        dependency2.srcSubpass = 0;
-        dependency2.dstSubpass = VK_SUBPASS_EXTERNAL;
-        dependency2.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
-        dependency2.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-        dependency2.dstStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT;
-        dependency2.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-        std::array<VkSubpassDependency, 2> dependencies = {dependency1, dependency2};
-
-        std::array<VkAttachmentDescription, 3> attachments = {colorAttachment, depthAttachment, colorAttachmentResolve};
-        VkRenderPassCreateInfo renderPassInfo{};
-        renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-        renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());;
-        renderPassInfo.pAttachments = attachments.data();
-        renderPassInfo.subpassCount = 1;
-        renderPassInfo.pSubpasses = &subpass;
-        renderPassInfo.dependencyCount = 2;
-        renderPassInfo.pDependencies = dependencies.data();
-
-        if (vkCreateRenderPass(logicalDevice, &renderPassInfo, nullptr, &mLambertRenderPass) != VK_SUCCESS)
-        {
-            throw std::runtime_error("failed to create render pass!");
         }
     }
 
@@ -456,7 +314,6 @@ private:
         createMultisampleColorResources(logicalDevice);
         createMultisampleDepthResources(physicalDevice, logicalDevice);
         createShadowMapDepthResources(physicalDevice, logicalDevice);
-        createFramebuffers(logicalDevice);
         createShadowMapGraphicsPipeline(logicalDevice);
         createLambertGraphicsPipeline(logicalDevice);
     }
@@ -567,6 +424,11 @@ private:
         depthStencil.front = {};
         depthStencil.back = {};
 
+        VkFormat depthFormat = findDepthFormat(mVulkanInstance.getPhysicalDevice());
+        VkPipelineRenderingCreateInfo renderingInfo{};
+        renderingInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
+        renderingInfo.depthAttachmentFormat = depthFormat;
+
         VkGraphicsPipelineCreateInfo pipelineInfo{};
         pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
         pipelineInfo.stageCount = 2;
@@ -580,7 +442,8 @@ private:
         pipelineInfo.pColorBlendState = &colorBlending;
         pipelineInfo.pDynamicState = nullptr;
         pipelineInfo.layout = mShadowMapPipelineLayout;
-        pipelineInfo.renderPass = mShadowMapRenderPass;
+        pipelineInfo.renderPass = VK_NULL_HANDLE;
+        pipelineInfo.pNext = &renderingInfo;
         pipelineInfo.subpass = 0;
         pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
         pipelineInfo.basePipelineIndex = -1;
@@ -739,6 +602,14 @@ private:
         depthStencil.front = {};
         depthStencil.back = {};
 
+        VkFormat colorFormat = mSwapChainImageFormat;
+        VkPipelineRenderingCreateInfo renderingInfo{};
+        renderingInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
+        renderingInfo.colorAttachmentCount = 1;
+        renderingInfo.pColorAttachmentFormats = &colorFormat;
+        VkFormat depthFormat = findDepthFormat(mVulkanInstance.getPhysicalDevice());
+        renderingInfo.depthAttachmentFormat = depthFormat;
+
         VkGraphicsPipelineCreateInfo pipelineInfo{};
         pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
         pipelineInfo.stageCount = 2;
@@ -752,7 +623,8 @@ private:
         pipelineInfo.pColorBlendState = &colorBlending;
         pipelineInfo.pDynamicState = nullptr;
         pipelineInfo.layout = mLambertPipelineLayout;
-        pipelineInfo.renderPass = mLambertRenderPass;
+        pipelineInfo.pNext = &renderingInfo;
+        pipelineInfo.renderPass = VK_NULL_HANDLE;
         pipelineInfo.subpass = 0;
         pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
         pipelineInfo.basePipelineIndex = -1;
@@ -763,56 +635,6 @@ private:
 
         vkDestroyShaderModule(logicalDevice, lambertFragShaderModule, nullptr);
         vkDestroyShaderModule(logicalDevice, lambertVertShaderModule, nullptr);
-    }
-
-    void createFramebuffers(const VkDevice& logicalDevice)
-    {
-        assert (mLambertRenderPass != VK_NULL_HANDLE);
-        assert (mShadowMapRenderPass != VK_NULL_HANDLE);
-        mSwapChainFramebuffers.resize(mSwapChainImageViews.size());
-        mShadowMapFramebuffers.resize(mSwapChainImageViews.size());
-
-        for (size_t i = 0; i < mSwapChainImageViews.size(); ++i)
-        {
-            std::array<VkImageView, 3> attachments = {
-                mColorImageView,
-                mDepthImageView,
-                mSwapChainImageViews[i],
-            };
-
-            VkFramebufferCreateInfo framebufferInfo{};
-            framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-            framebufferInfo.renderPass = mLambertRenderPass;
-            framebufferInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
-            framebufferInfo.pAttachments = attachments.data();
-            framebufferInfo.width = mSwapChainExtent.width;
-            framebufferInfo.height = mSwapChainExtent.height;
-            framebufferInfo.layers = 1;
-
-            if (vkCreateFramebuffer(logicalDevice, &framebufferInfo, nullptr, &mSwapChainFramebuffers[i]) != VK_SUCCESS)
-            {
-                throw std::runtime_error("failed to create framebuffer!");
-            }
-
-            std::array<VkImageView, 1> shadowMapFramebufferAttachments = {
-                mShadowMapImageViews[i],
-            };
-
-            VkFramebufferCreateInfo shadowMapFramebufferInfo{};
-            shadowMapFramebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-            shadowMapFramebufferInfo.renderPass = mShadowMapRenderPass;
-            shadowMapFramebufferInfo.attachmentCount = static_cast<uint32_t>(shadowMapFramebufferAttachments.size());
-            shadowMapFramebufferInfo.pAttachments = shadowMapFramebufferAttachments.data();
-            shadowMapFramebufferInfo.width = mSwapChainExtent.width;
-            shadowMapFramebufferInfo.height = mSwapChainExtent.height;
-            shadowMapFramebufferInfo.layers = 1;
-
-            if (vkCreateFramebuffer(logicalDevice, &shadowMapFramebufferInfo, nullptr, &mShadowMapFramebuffers[i]) != VK_SUCCESS)
-            {
-                throw std::runtime_error("failed to create shadow map framebuffer");
-            }
-
-        }
     }
 
     void loadObjects() {
@@ -1028,7 +850,7 @@ private:
             createImage(mVulkanInstance, logicalDevice, mSwapChainExtent.width, mSwapChainExtent.height, 1, VK_SAMPLE_COUNT_1_BIT, depthFormat,
                 VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT|VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, mShadowMapImages[i],mShadowMapImageMemory[i]);
             mShadowMapImageViews[i] = createImageView(logicalDevice, mShadowMapImages[i], depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, 1);
-            transitionImageLayout(mVulkanInstance, mShadowMapImages[i], depthFormat, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, 1);
+            transitionImageLayout(mVulkanInstance, mShadowMapImages[i], depthFormat, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 1);
         }
     }
 
@@ -1049,9 +871,6 @@ private:
         createMultisampleColorResources(mVulkanInstance.getLogicalDevice());
         createMultisampleDepthResources(mVulkanInstance.getPhysicalDevice(), mVulkanInstance.getLogicalDevice());
         createShadowMapDepthResources(mVulkanInstance.getPhysicalDevice(), mVulkanInstance.getLogicalDevice());
-        createRenderPass(mVulkanInstance.getPhysicalDevice(), mVulkanInstance.getLogicalDevice());
-        createShadowMapRenderPass(mVulkanInstance.getPhysicalDevice(), mVulkanInstance.getLogicalDevice());
-        createFramebuffers(mVulkanInstance.getLogicalDevice());
         createCamera();
         createUniformBuffers(mVulkanInstance.getLogicalDevice());
         createShadowMapSampler(mVulkanInstance.getPhysicalDevice(), mVulkanInstance.getLogicalDevice());
@@ -1110,17 +929,27 @@ private:
             throw std::runtime_error("failed to start recording command buffers");
         }
 
-        VkRenderPassBeginInfo shadowMapRenderPassInfo{};
-        shadowMapRenderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-        shadowMapRenderPassInfo.renderPass = mShadowMapRenderPass;
-        shadowMapRenderPassInfo.framebuffer = mShadowMapFramebuffers[imageIndex];
-        shadowMapRenderPassInfo.renderArea.offset = {0, 0};
-        shadowMapRenderPassInfo.renderArea.extent = mSwapChainExtent;
+        VkFormat depthFormat = findDepthFormat(physicalDevice);
+        transitionImageLayout(mVulkanInstance, mShadowMapImages[imageIndex], depthFormat, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, 1);
+        VkRenderingInfo shadowMapRenderInfo{};
+        shadowMapRenderInfo.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
+        VkRect2D shadowMapRenderArea{};
+        shadowMapRenderArea.offset = {0, 0};
+        shadowMapRenderArea.extent = mSwapChainExtent;
+        shadowMapRenderInfo.renderArea = shadowMapRenderArea;
+        shadowMapRenderInfo.layerCount = 1;
+        shadowMapRenderInfo.colorAttachmentCount = 0;
+        VkRenderingAttachmentInfo shadowMapDepthAttachmentInfo{};
+        shadowMapDepthAttachmentInfo.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+        shadowMapDepthAttachmentInfo.imageView = mShadowMapImageViews[imageIndex];
+        shadowMapDepthAttachmentInfo.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+        shadowMapDepthAttachmentInfo.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        shadowMapDepthAttachmentInfo.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
         VkClearValue shadowMapClearValue{};
         shadowMapClearValue.depthStencil = {1.0f, 0};
-        shadowMapRenderPassInfo.clearValueCount = 1;
-        shadowMapRenderPassInfo.pClearValues = &shadowMapClearValue;
-        vkCmdBeginRenderPass(commandBuffer, &shadowMapRenderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+        shadowMapDepthAttachmentInfo.clearValue = shadowMapClearValue;
+        shadowMapRenderInfo.pDepthAttachment = &shadowMapDepthAttachmentInfo;
+        vkCmdBeginRendering(commandBuffer, &shadowMapRenderInfo);
         vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mShadowMapGraphicsPipeline);
         vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mShadowMapPipelineLayout, 0, 1, &mShadowMapDescriptorSets[currentFrameIndex], 0, nullptr);
         for (Object* obj : objects) {
@@ -1129,40 +958,42 @@ private:
             vkCmdBindIndexBuffer(commandBuffer, obj->getIndexBuffer(), 0, VK_INDEX_TYPE_UINT32);
             vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(obj->getIndices().size()), 1, 0, 0, 0);
         }
-        vkCmdEndRenderPass(commandBuffer);
+        vkCmdEndRendering(commandBuffer);
+        transitionImageLayout(mVulkanInstance, mShadowMapImages[imageIndex], depthFormat, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 1);
 
-        VkFormat depthFormat = findDepthFormat(physicalDevice);
-        VkImageMemoryBarrier barrier{};
-        barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-        barrier.oldLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-        barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        barrier.image = mShadowMapImages[imageIndex];
-        barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
-        if (hasStencilComponent(depthFormat)) {
-            barrier.subresourceRange.aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
-        }
-        barrier.subresourceRange.baseMipLevel = 0;
-        barrier.subresourceRange.levelCount = 1;
-        barrier.subresourceRange.baseArrayLayer = 0;
-        barrier.subresourceRange.layerCount = 1;
-        barrier.srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-        barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-        vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1, &barrier);
-
-        VkRenderPassBeginInfo renderPassInfo{};
-        renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-        renderPassInfo.renderPass = mLambertRenderPass;
-        renderPassInfo.framebuffer = mSwapChainFramebuffers[imageIndex];
-        renderPassInfo.renderArea.offset = {0, 0};
-        renderPassInfo.renderArea.extent = mSwapChainExtent;
-        std::array<VkClearValue, 2> clearValues{};
-        clearValues[0].color = {{0.0f, 0.0f, 0.0f, 1.0f}};
-        clearValues[1].depthStencil = {1.0f, 0};
-        renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
-        renderPassInfo.pClearValues = clearValues.data();
-        vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+        transitionImageLayout(mVulkanInstance, mSwapChainImages[imageIndex], mSwapChainImageFormat, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 1);
+        VkRenderingInfo lambertRenderInfo{};
+        lambertRenderInfo.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
+        VkRect2D lambertRenderArea{};
+        lambertRenderArea.offset = {0, 0};
+        lambertRenderArea.extent = mSwapChainExtent;
+        lambertRenderInfo.renderArea = lambertRenderArea;
+        lambertRenderInfo.layerCount = 1;
+        lambertRenderInfo.colorAttachmentCount = 1;
+        VkRenderingAttachmentInfo colorAttachmentInfo{};
+        colorAttachmentInfo.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+        colorAttachmentInfo.imageView = mColorImageView;
+        colorAttachmentInfo.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        colorAttachmentInfo.resolveMode = VK_RESOLVE_MODE_AVERAGE_BIT;
+        colorAttachmentInfo.resolveImageView = mSwapChainImageViews[imageIndex];
+        colorAttachmentInfo.resolveImageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        colorAttachmentInfo.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        colorAttachmentInfo.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+        VkClearValue colorAttachmentClearValue{};
+        colorAttachmentClearValue.color = {{0.0f, 0.0f, 0.0f, 1.0f}};
+        colorAttachmentInfo.clearValue = colorAttachmentClearValue;
+        VkRenderingAttachmentInfo depthAttachmentInfo{};
+        depthAttachmentInfo.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+        depthAttachmentInfo.imageView = mDepthImageView;
+        depthAttachmentInfo.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+        depthAttachmentInfo.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        depthAttachmentInfo.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        VkClearValue depthAttachmentClearValue{};
+        depthAttachmentClearValue.depthStencil = {1.0f, 0};
+        depthAttachmentInfo.clearValue = depthAttachmentClearValue;
+        lambertRenderInfo.pColorAttachments = &colorAttachmentInfo;
+        lambertRenderInfo.pDepthAttachment = &depthAttachmentInfo;
+        vkCmdBeginRendering(commandBuffer, &lambertRenderInfo);
         for (Object* obj : objects) {
             vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mLambertGraphicsPipeline);
             VkBuffer vertexBuffers[] = {obj->getVertexBuffer()};
@@ -1171,7 +1002,8 @@ private:
             vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mLambertPipelineLayout, 0, 1, &(obj->getDescriptorSets()[currentFrameIndex]), 0, nullptr);
             vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(obj->getIndices().size()), 1, 0, 0, 0);
         }
-        vkCmdEndRenderPass(commandBuffer);
+        vkCmdEndRendering(commandBuffer);
+        transitionImageLayout(mVulkanInstance, mSwapChainImages[imageIndex], mSwapChainImageFormat, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, 1);
 
         if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS)
         {
@@ -1280,12 +1112,6 @@ private:
             vkDestroyImageView(logicalDevice, mSwapChainImageViews[i], nullptr);
         }
 
-        for (size_t i = 0; i < mSwapChainFramebuffers.size(); i++)
-        {
-            vkDestroyFramebuffer(logicalDevice, mSwapChainFramebuffers[i], nullptr);
-            vkDestroyFramebuffer(logicalDevice, mShadowMapFramebuffers[i], nullptr);
-        }
-
         vkDestroySwapchainKHR(logicalDevice, mSwapChain, nullptr);
     }
 
@@ -1353,8 +1179,6 @@ private:
         vkDestroyPipelineLayout(logicalDevice, mShadowMapPipelineLayout, nullptr);
         vkDestroyDescriptorSetLayout(logicalDevice, mLambertDescriptorSetLayout, nullptr);
         vkDestroyPipelineLayout(logicalDevice, mLambertPipelineLayout, nullptr);
-        vkDestroyRenderPass(logicalDevice, mShadowMapRenderPass, nullptr);
-        vkDestroyRenderPass(logicalDevice, mLambertRenderPass, nullptr);
         for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
         {
             vkDestroySemaphore(logicalDevice, mImageAvailableSemaphores[i], nullptr);
@@ -1379,16 +1203,12 @@ private:
     VkSampler mShadowMapSampler;
     VkFormat mSwapChainImageFormat;
     VkExtent2D mSwapChainExtent;
-    VkRenderPass mShadowMapRenderPass;
-    VkRenderPass mLambertRenderPass;
     VkDescriptorSetLayout mShadowMapDescriptorSetLayout;
     VkPipelineLayout mShadowMapPipelineLayout;
     VkPipeline mShadowMapGraphicsPipeline;
     VkDescriptorSetLayout mLambertDescriptorSetLayout;
     VkPipelineLayout mLambertPipelineLayout;
     VkPipeline mLambertGraphicsPipeline;
-    std::vector<VkFramebuffer> mSwapChainFramebuffers;
-    std::vector<VkFramebuffer> mShadowMapFramebuffers;
     std::vector<VkCommandBuffer> mCommandBuffers;
     std::vector<VkSemaphore> mImageAvailableSemaphores;
     std::vector<VkSemaphore> mRenderFinishedSemaphores;
