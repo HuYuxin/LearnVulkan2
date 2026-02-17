@@ -1,6 +1,5 @@
 #ifndef OBJECT_HPP
 #define OBJECT_HPP
-#include <vulkan/vulkan_core.h>
 #include "Vertex.hpp"
 #include "VulkanInstance.hpp"
 
@@ -26,10 +25,10 @@ public:
 protected:
     std::vector<Vertex> mVertices;
     std::vector<uint32_t> mIndices;
-    VkBuffer mVertexBuffer;
-    VkBuffer mIndexBuffer;
-    VkDeviceMemory mVertexBufferMemory;
-    VkDeviceMemory mIndexBufferMemory;
+    VkBuffer mVertexBuffer = VK_NULL_HANDLE;
+    VkBuffer mIndexBuffer = VK_NULL_HANDLE;
+    VkDeviceMemory mVertexBufferMemory = VK_NULL_HANDLE;
+    VkDeviceMemory mIndexBufferMemory = VK_NULL_HANDLE;
     std::vector<VkDescriptorSet> mDescriptorSets;
 };
 #endif

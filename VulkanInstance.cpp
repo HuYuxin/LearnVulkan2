@@ -1,4 +1,3 @@
-#define GLFW_INCLUDE_VULKAN
 #include "string.h"
 #include "VulkanInstance.hpp"
 #include <iostream>
@@ -14,7 +13,8 @@ namespace {
 
     const std::vector<const char *> deviceExtensions = {
         VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-        VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME
+        VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME,
+        VK_EXT_SHADER_OBJECT_EXTENSION_NAME,
     };
 
     struct SwapChainSupportDetails
@@ -77,28 +77,28 @@ namespace {
         createInfo.pfnUserCallback = debugCallback;
     }
 
-    VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT *pCreateInfo, const VkAllocationCallbacks *pAllocator, VkDebugUtilsMessengerEXT *pDebugMessenger)
-    {
-        auto func = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
+    // VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT *pCreateInfo, const VkAllocationCallbacks *pAllocator, VkDebugUtilsMessengerEXT *pDebugMessenger)
+    // {
+    //     auto func = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
 
-        if (func != nullptr)
-        {
-            return func(instance, pCreateInfo, pAllocator, pDebugMessenger);
-        }
-        else
-        {
-            return VK_ERROR_EXTENSION_NOT_PRESENT;
-        }
-    }
+    //     if (func != nullptr)
+    //     {
+    //         return func(instance, pCreateInfo, pAllocator, pDebugMessenger);
+    //     }
+    //     else
+    //     {
+    //         return VK_ERROR_EXTENSION_NOT_PRESENT;
+    //     }
+    // }
 
-    void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT debugMessenger, const VkAllocationCallbacks *pAllocator)
-    {
-        auto func = (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
-        if (func != nullptr)
-        {
-            func(instance, debugMessenger, pAllocator);
-        }
-    }
+    // void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT debugMessenger, const VkAllocationCallbacks *pAllocator)
+    // {
+    //     auto func = (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
+    //     if (func != nullptr)
+    //     {
+    //         func(instance, debugMessenger, pAllocator);
+    //     }
+    // }
 
     SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device, VkSurfaceKHR surface)
     {
@@ -152,6 +152,7 @@ std::vector<const char *> VulkanInstance::getRequiredExtensions()
         extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
     }
     // Required by VK_EXT_swapchain_maintenance1 device extension.
+    extensions.push_back(VK_KHR_GET_SURFACE_CAPABILITIES_2_EXTENSION_NAME);
     extensions.push_back(VK_EXT_SURFACE_MAINTENANCE_1_EXTENSION_NAME);
 
     return extensions;
@@ -163,8 +164,7 @@ void VulkanInstance::setupDebugMessenger() {
 
     VkDebugUtilsMessengerCreateInfoEXT createInfo;
     populateDebugMessengerCreateInfo(createInfo);
-
-    if (CreateDebugUtilsMessengerEXT(mInstance, &createInfo, nullptr, &mDebugMessenger) != VK_SUCCESS)
+    if (vkCreateDebugUtilsMessengerEXT(mInstance, &createInfo, nullptr, &mDebugMessenger) != VK_SUCCESS)
     {
         throw std::runtime_error("failed to set up debug messenger!");
     }
@@ -174,6 +174,10 @@ VulkanInstance::VulkanInstance() {
 }
 
 void VulkanInstance::createVulkanInstance() {
+    if (volkInitialize() != VK_SUCCESS) {
+        throw std::runtime_error("vulkan loader is not found!");
+    }
+
     // check validation layer support
     if (mEnableValidationLayer && !checkVadliationLayerSupport())
     {
@@ -192,10 +196,8 @@ void VulkanInstance::createVulkanInstance() {
     vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, nullptr);
     std::vector<VkExtensionProperties> vkSupportedExtensions(extensionCount);
     vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, vkSupportedExtensions.data());
-    std::cout << "available extensions:\n";
     for (const auto &extension : vkSupportedExtensions)
     {
-        std::cout << "\t" << extension.extensionName << "\n";
     }
 
     VkInstanceCreateInfo createInfo{};
@@ -222,7 +224,8 @@ void VulkanInstance::createVulkanInstance() {
     if (result != VK_SUCCESS)
     {
         throw std::runtime_error("failed to create instance!");
-    }  
+    }
+    volkLoadInstance(mInstance);  
 }
 
 bool VulkanInstance::isDeviceSuitable(VkPhysicalDevice device)
@@ -240,11 +243,6 @@ bool VulkanInstance::isDeviceSuitable(VkPhysicalDevice device)
 
     std::string deviceName(deviceProperties2.properties.deviceName);
 
-    // 3. Print the driver information
-    std::cout << "Device Name: " << deviceProperties2.properties.deviceName << std::endl;
-    std::cout << "Driver Name: " << driverProperties.driverName << std::endl;
-    std::cout << "Driver Info: " << driverProperties.driverInfo << std::endl;
-
     QueueFamilyIndices indices = findQueueFamilies(device);
 
     bool extensionsSupported = checkDeviceExtensionSupport(device);
@@ -256,21 +254,26 @@ bool VulkanInstance::isDeviceSuitable(VkPhysicalDevice device)
         swapChainAdequate = !swapChainSupport.formats.empty() && !swapChainSupport.presentModes.empty();
     }
 
-    VkPhysicalDeviceFeatures2 supportedFeatures2;
-    supportedFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
-    VkPhysicalDeviceSwapchainMaintenance1FeaturesEXT swapchainMaintenance1Features = {};
-    swapchainMaintenance1Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SWAPCHAIN_MAINTENANCE_1_FEATURES_EXT;
-
+    VkPhysicalDeviceSwapchainMaintenance1FeaturesEXT swapchainMaintenance1Feature = {};
+    swapchainMaintenance1Feature.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SWAPCHAIN_MAINTENANCE_1_FEATURES_EXT;
     VkPhysicalDeviceDynamicRenderingFeatures dynamicRenderingFeature{};
     dynamicRenderingFeature.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES;
-    swapchainMaintenance1Features.pNext = &dynamicRenderingFeature;
-    supportedFeatures2.pNext = &swapchainMaintenance1Features;
+    VkPhysicalDeviceShaderObjectFeaturesEXT shaderObjectFeature{};
+    shaderObjectFeature.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_OBJECT_FEATURES_EXT;
+
+    // Query device features
+    VkPhysicalDeviceFeatures2 supportedFeatures2;
+    supportedFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+    supportedFeatures2.pNext = &swapchainMaintenance1Feature;
+    swapchainMaintenance1Feature.pNext = &dynamicRenderingFeature;
+    dynamicRenderingFeature.pNext = &shaderObjectFeature;
     vkGetPhysicalDeviceFeatures2(device, &supportedFeatures2);
 
     return indices.isComplete() && extensionsSupported && swapChainAdequate
             && supportedFeatures2.features.samplerAnisotropy
-            && swapchainMaintenance1Features.swapchainMaintenance1 == VK_TRUE
-            && dynamicRenderingFeature.dynamicRendering == VK_TRUE;
+            && swapchainMaintenance1Feature.swapchainMaintenance1 == VK_TRUE
+            && dynamicRenderingFeature.dynamicRendering == VK_TRUE
+            && shaderObjectFeature.shaderObject == VK_TRUE;
 }
 
 
@@ -292,7 +295,6 @@ VkSampleCountFlagBits VulkanInstance::getMaxUsableSampleCount() {
 void VulkanInstance::pickPhysicalDevice() {
     uint32_t deviceCount = 0;
     vkEnumeratePhysicalDevices(mInstance, &deviceCount, nullptr);
-    std::cout << deviceCount << std::endl;
     if (deviceCount == 0)
     {
         throw std::runtime_error("failed to find GPUs with Vulkan support!");
@@ -342,20 +344,25 @@ void VulkanInstance::createLogicalDevice() {
 
         VkPhysicalDeviceFeatures deviceFeatures{};
         deviceFeatures.samplerAnisotropy = VK_TRUE;
-        VkPhysicalDeviceSwapchainMaintenance1FeaturesEXT swapchainMaintenance1Features{};
-        swapchainMaintenance1Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SWAPCHAIN_MAINTENANCE_1_FEATURES_EXT;
-        swapchainMaintenance1Features.swapchainMaintenance1 = VK_TRUE;
+        VkPhysicalDeviceSwapchainMaintenance1FeaturesEXT swapchainMaintenance1Feature{};
+        swapchainMaintenance1Feature.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SWAPCHAIN_MAINTENANCE_1_FEATURES_EXT;
+        swapchainMaintenance1Feature.swapchainMaintenance1 = VK_TRUE;
         VkPhysicalDeviceDynamicRenderingFeatures dynamicRenderingFeature{};
         dynamicRenderingFeature.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES;
         dynamicRenderingFeature.dynamicRendering = VK_TRUE;
+        VkPhysicalDeviceShaderObjectFeaturesEXT shaderObjectFeature{};
+        shaderObjectFeature.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_OBJECT_FEATURES_EXT;
+        shaderObjectFeature.shaderObject = VK_TRUE;
+
 
         VkDeviceCreateInfo createInfo{};
         createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
         createInfo.pQueueCreateInfos = queueCreateInfos.data();
         createInfo.queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size());
         createInfo.pEnabledFeatures = &deviceFeatures;
-        createInfo.pNext = &swapchainMaintenance1Features;
-        swapchainMaintenance1Features.pNext = &dynamicRenderingFeature;
+        createInfo.pNext = &swapchainMaintenance1Feature;
+        swapchainMaintenance1Feature.pNext = &dynamicRenderingFeature;
+        dynamicRenderingFeature.pNext = &shaderObjectFeature;
         createInfo.enabledExtensionCount = static_cast<uint32_t>(deviceExtensions.size());
         createInfo.ppEnabledExtensionNames = deviceExtensions.data();
         if (mEnableValidationLayer)
@@ -372,6 +379,9 @@ void VulkanInstance::createLogicalDevice() {
         {
             throw std::runtime_error("failed to create logical device!");
         }
+
+        // Load device-level function pointers with volk so device extensions are callable
+        volkLoadDevice(mDevice);
 
         vkGetDeviceQueue(mDevice, indices.graphicsFamily.value(), 0, &mGraphicsQueue);
         vkGetDeviceQueue(mDevice, indices.presentFamily.value(), 0, &mPresentQueue);
@@ -406,7 +416,7 @@ void VulkanInstance::destroy() {
     vkDestroySurfaceKHR(mInstance, mSurface, nullptr);
     vkDestroyDevice(mDevice, nullptr);
     if (mEnableValidationLayer) {
-        DestroyDebugUtilsMessengerEXT(mInstance, mDebugMessenger, nullptr);
+        vkDestroyDebugUtilsMessengerEXT(mInstance, mDebugMessenger, nullptr);
     }
     vkDestroyInstance(mInstance, nullptr);
 }

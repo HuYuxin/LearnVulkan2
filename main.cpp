@@ -1,4 +1,3 @@
-#define GLFW_INCLUDE_VULKAN
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #define STB_IMAGE_IMPLEMENTATION
@@ -314,93 +313,9 @@ private:
         createMultisampleColorResources(logicalDevice);
         createMultisampleDepthResources(physicalDevice, logicalDevice);
         createShadowMapDepthResources(physicalDevice, logicalDevice);
-        createShadowMapGraphicsPipeline(logicalDevice);
-        createLambertGraphicsPipeline(logicalDevice);
     }
 
-    void createShadowMapGraphicsPipeline(const VkDevice& logicalDevice)
-    {
-        auto shadowMapVertShaderCode = readFile("shaders/shadowMapVert.spv");
-        auto shadowMapFragShaderCode = readFile("shaders/shadowMapFrag.spv");
-
-        VkShaderModule shadowMapVertShaderModule = mVulkanInstance.createShaderModule(shadowMapVertShaderCode);
-        VkShaderModule shadowMapFragShaderModule = mVulkanInstance.createShaderModule(shadowMapFragShaderCode);
-        VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
-        vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-        vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
-        vertShaderStageInfo.module = shadowMapVertShaderModule;
-        vertShaderStageInfo.pName = "main";
-        VkPipelineShaderStageCreateInfo fragShaderStageInfo{};
-        fragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-        fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-        fragShaderStageInfo.module = shadowMapFragShaderModule;
-        fragShaderStageInfo.pName = "main";
-        VkPipelineShaderStageCreateInfo shadowMapShaderStages[] = {vertShaderStageInfo, fragShaderStageInfo};
-
-        VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
-        vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-        auto bindingDescription = Vertex::getBindingDescription();
-        vertexInputInfo.vertexBindingDescriptionCount = 1;
-        vertexInputInfo.pVertexBindingDescriptions = &bindingDescription;
-        auto vertexAttributeDescription = Vertex::getAttributeDescriptions();
-        vertexInputInfo.vertexAttributeDescriptionCount = 3;
-        vertexInputInfo.pVertexAttributeDescriptions = vertexAttributeDescription.data();
-
-        VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
-        inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-        inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-        inputAssembly.primitiveRestartEnable = VK_FALSE;
-
-        VkViewport viewport{};
-        viewport.x = 0.0f;
-        viewport.y = 0.0f;
-        viewport.width = (float)mSwapChainExtent.width;
-        viewport.height = (float)mSwapChainExtent.height;
-        viewport.minDepth = 0.0f;
-        viewport.maxDepth = 1.0f;
-        VkRect2D scissor{};
-        scissor.offset = {0, 0};
-        scissor.extent = mSwapChainExtent;
-        VkPipelineViewportStateCreateInfo viewportState{};
-        viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-        viewportState.viewportCount = 1;
-        viewportState.pViewports = &viewport;
-        viewportState.scissorCount = 1;
-        viewportState.pScissors = &scissor;
-
-        VkPipelineRasterizationStateCreateInfo rasterizer{};
-        rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-        rasterizer.depthClampEnable = VK_FALSE;
-        rasterizer.rasterizerDiscardEnable = VK_FALSE;
-        rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
-        rasterizer.lineWidth = 1.0f;
-        rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
-        rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
-        rasterizer.depthBiasEnable = VK_FALSE;
-        rasterizer.depthBiasConstantFactor = 0.0f;
-        rasterizer.depthBiasClamp = 0.0f;
-        rasterizer.depthBiasSlopeFactor = 0.0f;
-
-        VkPipelineMultisampleStateCreateInfo multisampling{};
-        multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-        multisampling.sampleShadingEnable = VK_FALSE;
-        multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
-        multisampling.minSampleShading = 1.0f;
-        multisampling.pSampleMask = nullptr;
-        multisampling.alphaToCoverageEnable = VK_FALSE;
-        multisampling.alphaToOneEnable = VK_FALSE;
-
-        VkPipelineColorBlendStateCreateInfo colorBlending{};
-        colorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-        colorBlending.logicOpEnable = VK_FALSE;
-        colorBlending.logicOp = VK_LOGIC_OP_COPY;
-        colorBlending.attachmentCount = 0;
-        colorBlending.pAttachments = nullptr;
-        colorBlending.blendConstants[0] = 0.0f;
-        colorBlending.blendConstants[1] = 0.0f;
-        colorBlending.blendConstants[2] = 0.0f;
-        colorBlending.blendConstants[3] = 0.0f;
-
+    void createShadowMapGraphicsPipelineLayout(const VkDevice& logicalDevice) {
         VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
         pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
         pipelineLayoutInfo.setLayoutCount = 1;
@@ -411,49 +326,46 @@ private:
         {
             throw std::runtime_error("failed to create shadowmap pipeline layout!");
         }
+    }
 
-        VkPipelineDepthStencilStateCreateInfo depthStencil{};
-        depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-        depthStencil.depthTestEnable = VK_TRUE;
-        depthStencil.depthWriteEnable = VK_TRUE;
-        depthStencil.depthCompareOp = VK_COMPARE_OP_LESS;
-        depthStencil.depthBoundsTestEnable = VK_FALSE;
-        depthStencil.minDepthBounds = 0.0f;
-        depthStencil.maxDepthBounds = 1.0f;
-        depthStencil.stencilTestEnable = VK_FALSE;
-        depthStencil.front = {};
-        depthStencil.back = {};
-
-        VkFormat depthFormat = findDepthFormat(mVulkanInstance.getPhysicalDevice());
-        VkPipelineRenderingCreateInfo renderingInfo{};
-        renderingInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
-        renderingInfo.depthAttachmentFormat = depthFormat;
-
-        VkGraphicsPipelineCreateInfo pipelineInfo{};
-        pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-        pipelineInfo.stageCount = 2;
-        pipelineInfo.pStages = shadowMapShaderStages;
-        pipelineInfo.pVertexInputState = &vertexInputInfo;
-        pipelineInfo.pInputAssemblyState = &inputAssembly;
-        pipelineInfo.pViewportState = &viewportState;
-        pipelineInfo.pRasterizationState = &rasterizer;
-        pipelineInfo.pMultisampleState = &multisampling;
-        pipelineInfo.pDepthStencilState = &depthStencil;
-        pipelineInfo.pColorBlendState = &colorBlending;
-        pipelineInfo.pDynamicState = nullptr;
-        pipelineInfo.layout = mShadowMapPipelineLayout;
-        pipelineInfo.renderPass = VK_NULL_HANDLE;
-        pipelineInfo.pNext = &renderingInfo;
-        pipelineInfo.subpass = 0;
-        pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
-        pipelineInfo.basePipelineIndex = -1;
-        if (vkCreateGraphicsPipelines(logicalDevice, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &mShadowMapGraphicsPipeline) != VK_SUCCESS)
-        {
-            throw std::runtime_error("failed to create graphics pipeline!");
+    void createShadowMapShaderObjects(const VkDevice& logicalDevice) {
+        VkShaderEXT shadowMapVertexShaderObject;
+        size_t shadowMapVertexShaderCodeSize = 0;
+        std::vector<char>  shadowMapVertexShaderCode = readFile("shaders/shadowMapVert.spv", shadowMapVertexShaderCodeSize);
+        VkShaderCreateInfoEXT shadowMapVertexShaderCreateInfo = {};
+        shadowMapVertexShaderCreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_CREATE_INFO_EXT;
+        shadowMapVertexShaderCreateInfo.flags = VK_SHADER_CREATE_LINK_STAGE_BIT_EXT;
+        shadowMapVertexShaderCreateInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
+        shadowMapVertexShaderCreateInfo.nextStage = VK_SHADER_STAGE_FRAGMENT_BIT;
+        shadowMapVertexShaderCreateInfo.codeType = VK_SHADER_CODE_TYPE_SPIRV_EXT;
+        shadowMapVertexShaderCreateInfo.pCode = shadowMapVertexShaderCode.data();
+        shadowMapVertexShaderCreateInfo.codeSize = shadowMapVertexShaderCodeSize;
+        shadowMapVertexShaderCreateInfo.pName = "main";
+        shadowMapVertexShaderCreateInfo.setLayoutCount = 1;
+        shadowMapVertexShaderCreateInfo.pSetLayouts = &mShadowMapDescriptorSetLayout;
+        if (vkCreateShadersEXT(logicalDevice, 1, &shadowMapVertexShaderCreateInfo, nullptr, &shadowMapVertexShaderObject) != VK_SUCCESS) {
+            throw std::runtime_error("failed to create shadowmap vertex shader object!");
         }
+        VkShaderEXT shadowMapFragmentShaderObject;
+        size_t shadowMapFragmentShaderCodeSize = 0;
+        std::vector<char>  shadowMapFragmentShaderCode = readFile("shaders/shadowMapFrag.spv", shadowMapFragmentShaderCodeSize);
+        VkShaderCreateInfoEXT shadowMapFragmentShaderCreateInfo = {};
+        shadowMapFragmentShaderCreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_CREATE_INFO_EXT;
+        shadowMapFragmentShaderCreateInfo.flags = VK_SHADER_CREATE_LINK_STAGE_BIT_EXT;
+        shadowMapFragmentShaderCreateInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+        shadowMapFragmentShaderCreateInfo.nextStage = 0;
+        shadowMapFragmentShaderCreateInfo.codeType = VK_SHADER_CODE_TYPE_SPIRV_EXT;
+        shadowMapFragmentShaderCreateInfo.pCode = shadowMapFragmentShaderCode.data();
+        shadowMapFragmentShaderCreateInfo.codeSize = shadowMapFragmentShaderCodeSize;
+        shadowMapFragmentShaderCreateInfo.pName = "main";
+        shadowMapFragmentShaderCreateInfo.setLayoutCount = 1;
+        shadowMapFragmentShaderCreateInfo.pSetLayouts = &mShadowMapDescriptorSetLayout;
 
-        vkDestroyShaderModule(logicalDevice, shadowMapVertShaderModule, nullptr);
-        vkDestroyShaderModule(logicalDevice, shadowMapFragShaderModule, nullptr);
+        if(vkCreateShadersEXT(logicalDevice, 1, &shadowMapFragmentShaderCreateInfo, nullptr, &shadowMapFragmentShaderObject) != VK_SUCCESS) {
+            throw std::runtime_error("failed to create shadowmap fragment shader object!");
+        }
+        mShadowMapShaderObjects[0] = std::move(shadowMapVertexShaderObject);
+        mShadowMapShaderObjects[1] = std::move(shadowMapFragmentShaderObject);
     }
 
     void createLambertDescriptorSetLayout(const VkDevice& logicalDevice) {
@@ -487,98 +399,47 @@ private:
         }
     }
 
-    void createLambertGraphicsPipeline(const VkDevice& logicalDevice) {
-        auto lambertVertShaderCode = readFile("shaders/lambertVert.spv");
-        auto lambertFragShaderCode = readFile("shaders/lambertFrag.spv");
+    void createLambertShaderObjects(const VkDevice& logicalDevice) {
+        VkShaderEXT lambertVertexShaderObject;
+        size_t lambertVertexShaderCodeSize = 0;
+        std::vector<char>  lambertVertexShaderCode = readFile("shaders/lambertVert.spv", lambertVertexShaderCodeSize);
+        VkShaderCreateInfoEXT lambertVertexShaderCreateInfo = {};
+        lambertVertexShaderCreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_CREATE_INFO_EXT;
+        lambertVertexShaderCreateInfo.flags = VK_SHADER_CREATE_LINK_STAGE_BIT_EXT;
+        lambertVertexShaderCreateInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
+        lambertVertexShaderCreateInfo.nextStage = VK_SHADER_STAGE_FRAGMENT_BIT;
+        lambertVertexShaderCreateInfo.codeType = VK_SHADER_CODE_TYPE_SPIRV_EXT;
+        lambertVertexShaderCreateInfo.pCode = lambertVertexShaderCode.data();
+        lambertVertexShaderCreateInfo.codeSize = lambertVertexShaderCodeSize;
+        lambertVertexShaderCreateInfo.pName = "main";
+        lambertVertexShaderCreateInfo.setLayoutCount = 1;
+        lambertVertexShaderCreateInfo.pSetLayouts = &mLambertDescriptorSetLayout;
+        if (vkCreateShadersEXT(logicalDevice, 1, &lambertVertexShaderCreateInfo, nullptr, &lambertVertexShaderObject) != VK_SUCCESS) {
+            throw std::runtime_error("failed to create lambert vertex shader object!");
+        }
+        VkShaderEXT lambertFragmentShaderObject;
+        size_t lambertFragmentShaderCodeSize = 0;
+        std::vector<char>  lambertFragmentShaderCode = readFile("shaders/lambertFrag.spv", lambertFragmentShaderCodeSize);
+        VkShaderCreateInfoEXT lambertFragmentShaderCreateInfo = {};
+        lambertFragmentShaderCreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_CREATE_INFO_EXT;
+        lambertFragmentShaderCreateInfo.flags = VK_SHADER_CREATE_LINK_STAGE_BIT_EXT;
+        lambertFragmentShaderCreateInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+        lambertFragmentShaderCreateInfo.nextStage = 0;
+        lambertFragmentShaderCreateInfo.codeType = VK_SHADER_CODE_TYPE_SPIRV_EXT;
+        lambertFragmentShaderCreateInfo.pCode = lambertFragmentShaderCode.data();
+        lambertFragmentShaderCreateInfo.codeSize = lambertFragmentShaderCodeSize;
+        lambertFragmentShaderCreateInfo.pName = "main";
+        lambertFragmentShaderCreateInfo.setLayoutCount = 1;
+        lambertFragmentShaderCreateInfo.pSetLayouts = &mLambertDescriptorSetLayout;
 
-        VkShaderModule lambertVertShaderModule = mVulkanInstance.createShaderModule(lambertVertShaderCode);
-        VkShaderModule lambertFragShaderModule = mVulkanInstance.createShaderModule(lambertFragShaderCode);
-        VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
-        vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-        vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
-        vertShaderStageInfo.module = lambertVertShaderModule;
-        vertShaderStageInfo.pName = "main";
-        VkPipelineShaderStageCreateInfo fragShaderStageInfo{};
-        fragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-        fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-        fragShaderStageInfo.module = lambertFragShaderModule;
-        fragShaderStageInfo.pName = "main";
-        VkPipelineShaderStageCreateInfo cubeShaderStages[] = {vertShaderStageInfo, fragShaderStageInfo};
+        if(vkCreateShadersEXT(logicalDevice, 1, &lambertFragmentShaderCreateInfo, nullptr, &lambertFragmentShaderObject) != VK_SUCCESS) {
+            throw std::runtime_error("failed to create lambert fragment shader object!");
+        }
+        mLambertShaderObjects[0] = std::move(lambertVertexShaderObject);
+        mLambertShaderObjects[1] = std::move(lambertFragmentShaderObject);
+    }
 
-        VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
-        vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-        auto bindingDescription = Vertex::getBindingDescription();
-        vertexInputInfo.vertexBindingDescriptionCount = 1;
-        vertexInputInfo.pVertexBindingDescriptions = &bindingDescription;
-        auto vertexAttributeDescription = Vertex::getAttributeDescriptions();
-        vertexInputInfo.vertexAttributeDescriptionCount = 3;
-        vertexInputInfo.pVertexAttributeDescriptions = vertexAttributeDescription.data();
-
-        VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
-        inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-        inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-        inputAssembly.primitiveRestartEnable = VK_FALSE;
-
-        VkViewport viewport{};
-        viewport.x = 0.0f;
-        viewport.y = 0.0f;
-        viewport.width = (float)mSwapChainExtent.width;
-        viewport.height = (float)mSwapChainExtent.height;
-        viewport.minDepth = 0.0f;
-        viewport.maxDepth = 1.0f;
-        VkRect2D scissor{};
-        scissor.offset = {0, 0};
-        scissor.extent = mSwapChainExtent;
-        VkPipelineViewportStateCreateInfo viewportState{};
-        viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-        viewportState.viewportCount = 1;
-        viewportState.pViewports = &viewport;
-        viewportState.scissorCount = 1;
-        viewportState.pScissors = &scissor;
-
-        VkPipelineRasterizationStateCreateInfo rasterizer{};
-        rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-        rasterizer.depthClampEnable = VK_FALSE;
-        rasterizer.rasterizerDiscardEnable = VK_FALSE;
-        rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
-        rasterizer.lineWidth = 1.0f;
-        rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
-        rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
-        rasterizer.depthBiasEnable = VK_FALSE;
-        rasterizer.depthBiasConstantFactor = 0.0f;
-        rasterizer.depthBiasClamp = 0.0f;
-        rasterizer.depthBiasSlopeFactor = 0.0f;
-
-        VkPipelineMultisampleStateCreateInfo multisampling{};
-        multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-        multisampling.sampleShadingEnable = VK_FALSE;
-        multisampling.rasterizationSamples = mVulkanInstance.getMsaaSamples();
-        multisampling.minSampleShading = 1.0f;
-        multisampling.pSampleMask = nullptr;
-        multisampling.alphaToCoverageEnable = VK_FALSE;
-        multisampling.alphaToOneEnable = VK_FALSE;
-
-        VkPipelineColorBlendAttachmentState colorBlendAttachment{};
-        colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-        colorBlendAttachment.blendEnable = VK_FALSE;
-        colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
-        colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO;
-        colorBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
-        colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-        colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
-        colorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
-
-        VkPipelineColorBlendStateCreateInfo colorBlending{};
-        colorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-        colorBlending.logicOpEnable = VK_FALSE;
-        colorBlending.logicOp = VK_LOGIC_OP_COPY;
-        colorBlending.attachmentCount = 1;
-        colorBlending.pAttachments = &colorBlendAttachment;
-        colorBlending.blendConstants[0] = 0.0f;
-        colorBlending.blendConstants[1] = 0.0f;
-        colorBlending.blendConstants[2] = 0.0f;
-        colorBlending.blendConstants[3] = 0.0f;
-
+    void createLambertGraphicsPipelineLayout(const VkDevice& logicalDevice) {
         VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
         pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
         pipelineLayoutInfo.setLayoutCount = 1;
@@ -589,52 +450,6 @@ private:
         {
             throw std::runtime_error("failed to create pipeline layout!");
         }
-
-        VkPipelineDepthStencilStateCreateInfo depthStencil{};
-        depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-        depthStencil.depthTestEnable = VK_TRUE;
-        depthStencil.depthWriteEnable = VK_TRUE;
-        depthStencil.depthCompareOp = VK_COMPARE_OP_LESS;
-        depthStencil.depthBoundsTestEnable = VK_FALSE;
-        depthStencil.minDepthBounds = 0.0f;
-        depthStencil.maxDepthBounds = 1.0f;
-        depthStencil.stencilTestEnable = VK_FALSE;
-        depthStencil.front = {};
-        depthStencil.back = {};
-
-        VkFormat colorFormat = mSwapChainImageFormat;
-        VkPipelineRenderingCreateInfo renderingInfo{};
-        renderingInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
-        renderingInfo.colorAttachmentCount = 1;
-        renderingInfo.pColorAttachmentFormats = &colorFormat;
-        VkFormat depthFormat = findDepthFormat(mVulkanInstance.getPhysicalDevice());
-        renderingInfo.depthAttachmentFormat = depthFormat;
-
-        VkGraphicsPipelineCreateInfo pipelineInfo{};
-        pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-        pipelineInfo.stageCount = 2;
-        pipelineInfo.pStages = cubeShaderStages;
-        pipelineInfo.pVertexInputState = &vertexInputInfo;
-        pipelineInfo.pInputAssemblyState = &inputAssembly;
-        pipelineInfo.pViewportState = &viewportState;
-        pipelineInfo.pRasterizationState = &rasterizer;
-        pipelineInfo.pMultisampleState = &multisampling;
-        pipelineInfo.pDepthStencilState = &depthStencil;
-        pipelineInfo.pColorBlendState = &colorBlending;
-        pipelineInfo.pDynamicState = nullptr;
-        pipelineInfo.layout = mLambertPipelineLayout;
-        pipelineInfo.pNext = &renderingInfo;
-        pipelineInfo.renderPass = VK_NULL_HANDLE;
-        pipelineInfo.subpass = 0;
-        pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
-        pipelineInfo.basePipelineIndex = -1;
-        if (vkCreateGraphicsPipelines(logicalDevice, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &mLambertGraphicsPipeline) != VK_SUCCESS)
-        {
-            throw std::runtime_error("failed to create graphics pipeline!");
-        }
-
-        vkDestroyShaderModule(logicalDevice, lambertFragShaderModule, nullptr);
-        vkDestroyShaderModule(logicalDevice, lambertVertShaderModule, nullptr);
     }
 
     void loadObjects() {
@@ -877,9 +692,11 @@ private:
         createDescriptorPool(mVulkanInstance.getLogicalDevice());
         createShadowMapDescriptorSetLayout(mVulkanInstance.getLogicalDevice());
         createShadowMapDescriptorSets(mVulkanInstance.getLogicalDevice());
-        createShadowMapGraphicsPipeline(mVulkanInstance.getLogicalDevice());
+        createShadowMapShaderObjects(mVulkanInstance.getLogicalDevice());
+        createShadowMapGraphicsPipelineLayout(mVulkanInstance.getLogicalDevice());
         createLambertDescriptorSetLayout(mVulkanInstance.getLogicalDevice());
-        createLambertGraphicsPipeline(mVulkanInstance.getLogicalDevice());
+        createLambertShaderObjects(mVulkanInstance.getLogicalDevice());
+        createLambertGraphicsPipelineLayout(mVulkanInstance.getLogicalDevice());
         loadObjects();
         initializeObjects();
         createCommandBuffer(mVulkanInstance.getCommandPool(), mVulkanInstance.getLogicalDevice());
@@ -950,8 +767,44 @@ private:
         shadowMapDepthAttachmentInfo.clearValue = shadowMapClearValue;
         shadowMapRenderInfo.pDepthAttachment = &shadowMapDepthAttachmentInfo;
         vkCmdBeginRendering(commandBuffer, &shadowMapRenderInfo);
-        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mShadowMapGraphicsPipeline);
+        VkRect2D scissor{};
+        scissor.offset = {0, 0};
+        scissor.extent = mSwapChainExtent;
+        vkCmdSetScissorWithCount(commandBuffer, 1, &scissor);
+        VkViewport viewport{};
+        viewport.x = 0.0f;
+        viewport.y = 0.0f;
+        viewport.width = (float)mSwapChainExtent.width;
+        viewport.height = (float)mSwapChainExtent.height;
+        viewport.minDepth = 0.0f;
+        viewport.maxDepth = 1.0f;
+	    vkCmdSetViewportWithCountEXT(commandBuffer, 1, &viewport);
+	    vkCmdSetCullMode(commandBuffer, VK_CULL_MODE_BACK_BIT);
+		vkCmdSetFrontFace(commandBuffer, VK_FRONT_FACE_COUNTER_CLOCKWISE);
+		vkCmdSetDepthTestEnable(commandBuffer, VK_TRUE);
+		vkCmdSetDepthWriteEnable(commandBuffer, VK_TRUE);
+		vkCmdSetDepthCompareOp(commandBuffer, VK_COMPARE_OP_LESS);
+		vkCmdSetPrimitiveTopology(commandBuffer, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+		vkCmdSetRasterizerDiscardEnable(commandBuffer, VK_FALSE);
+		vkCmdSetPolygonModeEXT(commandBuffer, VK_POLYGON_MODE_FILL);
+		vkCmdSetRasterizationSamplesEXT(commandBuffer, VK_SAMPLE_COUNT_1_BIT);
+		vkCmdSetAlphaToCoverageEnableEXT(commandBuffer, VK_FALSE);
+		vkCmdSetDepthBiasEnable(commandBuffer, VK_FALSE);
+		vkCmdSetStencilTestEnable(commandBuffer, VK_FALSE);
+		vkCmdSetPrimitiveRestartEnable(commandBuffer, VK_FALSE);
+		const uint32_t sampleMask = 0xFF;
+		vkCmdSetSampleMaskEXT(commandBuffer, VK_SAMPLE_COUNT_1_BIT, &sampleMask);
+		const VkBool32 colorBlendEnables = false;
+		const VkColorComponentFlags colorBlendComponentFlags = 0xf;
+		vkCmdSetColorBlendEnableEXT(commandBuffer, 0, 1, &colorBlendEnables);
+		vkCmdSetColorWriteMaskEXT(commandBuffer, 0, 1, &colorBlendComponentFlags);
+        VkVertexInputBindingDescription2EXT vertexInputBinding = Vertex::getBindingDescription2EXT();
+		std::array<VkVertexInputAttributeDescription2EXT, 3> vertexAttributes = Vertex::getAttributeDescriptions2EXT();
+		vkCmdSetVertexInputEXT(commandBuffer, 1, &vertexInputBinding, 3, vertexAttributes.data());
         vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mShadowMapPipelineLayout, 0, 1, &mShadowMapDescriptorSets[currentFrameIndex], 0, nullptr);
+        
+        std::array<VkShaderStageFlagBits, 2> shaderStageBits = {VK_SHADER_STAGE_VERTEX_BIT, VK_SHADER_STAGE_FRAGMENT_BIT};
+        vkCmdBindShadersEXT(commandBuffer, 2, &shaderStageBits[0], &mShadowMapShaderObjects[0]);
         for (Object* obj : objects) {
             VkBuffer vertexBuffers[] = {obj->getVertexBuffer()};
             vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
@@ -994,8 +847,28 @@ private:
         lambertRenderInfo.pColorAttachments = &colorAttachmentInfo;
         lambertRenderInfo.pDepthAttachment = &depthAttachmentInfo;
         vkCmdBeginRendering(commandBuffer, &lambertRenderInfo);
+        vkCmdSetScissorWithCount(commandBuffer, 1, &scissor);
+	    vkCmdSetViewportWithCountEXT(commandBuffer, 1, &viewport);
+	    vkCmdSetCullMode(commandBuffer, VK_CULL_MODE_BACK_BIT);
+		vkCmdSetFrontFace(commandBuffer, VK_FRONT_FACE_COUNTER_CLOCKWISE);
+		vkCmdSetDepthTestEnable(commandBuffer, VK_TRUE);
+		vkCmdSetDepthWriteEnable(commandBuffer, VK_TRUE);
+		vkCmdSetDepthCompareOp(commandBuffer, VK_COMPARE_OP_LESS);
+		vkCmdSetPrimitiveTopology(commandBuffer, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+		vkCmdSetRasterizerDiscardEnable(commandBuffer, VK_FALSE);
+		vkCmdSetPolygonModeEXT(commandBuffer, VK_POLYGON_MODE_FILL);
+		vkCmdSetRasterizationSamplesEXT(commandBuffer, mVulkanInstance.getMsaaSamples());
+		vkCmdSetAlphaToCoverageEnableEXT(commandBuffer, VK_FALSE);
+		vkCmdSetDepthBiasEnable(commandBuffer, VK_FALSE);
+		vkCmdSetStencilTestEnable(commandBuffer, VK_FALSE);
+		vkCmdSetPrimitiveRestartEnable(commandBuffer, VK_FALSE);
+		vkCmdSetSampleMaskEXT(commandBuffer, VK_SAMPLE_COUNT_1_BIT, &sampleMask);
+		vkCmdSetColorBlendEnableEXT(commandBuffer, 0, 1, &colorBlendEnables);
+		vkCmdSetColorWriteMaskEXT(commandBuffer, 0, 1, &colorBlendComponentFlags);
+		vkCmdSetVertexInputEXT(commandBuffer, 1, &vertexInputBinding, 3, vertexAttributes.data());
+        vkCmdBindShadersEXT(commandBuffer, 2, &shaderStageBits[0], &mLambertShaderObjects[0]);
+
         for (Object* obj : objects) {
-            vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mLambertGraphicsPipeline);
             VkBuffer vertexBuffers[] = {obj->getVertexBuffer()};
             vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
             vkCmdBindIndexBuffer(commandBuffer, obj->getIndexBuffer(), 0, VK_INDEX_TYPE_UINT32);
@@ -1164,8 +1037,12 @@ private:
         for (Object* obj : objects) {
             obj->clearResource(mVulkanInstance);
         }
-        vkDestroyPipeline(logicalDevice, mShadowMapGraphicsPipeline, nullptr);
-        vkDestroyPipeline(logicalDevice, mLambertGraphicsPipeline, nullptr);
+        for (VkShaderEXT& shadowMapShaderObject : mShadowMapShaderObjects) {
+            vkDestroyShaderEXT(logicalDevice, shadowMapShaderObject, nullptr);
+        }
+        for (VkShaderEXT& lambertShaderObject : mLambertShaderObjects) {
+            vkDestroyShaderEXT(logicalDevice, lambertShaderObject, nullptr);
+        }
 
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
             vkDestroyBuffer(logicalDevice, mUniformsBuffers[i], nullptr);
@@ -1205,10 +1082,10 @@ private:
     VkExtent2D mSwapChainExtent;
     VkDescriptorSetLayout mShadowMapDescriptorSetLayout;
     VkPipelineLayout mShadowMapPipelineLayout;
-    VkPipeline mShadowMapGraphicsPipeline;
+    std::array<VkShaderEXT, 2> mShadowMapShaderObjects;
     VkDescriptorSetLayout mLambertDescriptorSetLayout;
+    std::array<VkShaderEXT, 2> mLambertShaderObjects;
     VkPipelineLayout mLambertPipelineLayout;
-    VkPipeline mLambertGraphicsPipeline;
     std::vector<VkCommandBuffer> mCommandBuffers;
     std::vector<VkSemaphore> mImageAvailableSemaphores;
     std::vector<VkSemaphore> mRenderFinishedSemaphores;

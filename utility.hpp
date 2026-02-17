@@ -1,7 +1,6 @@
 #ifndef UTILITY_HPP
 #define UTILITY_HPP
 #include "VulkanInstance.hpp"
-#include <vulkan/vulkan_core.h>
 
 
 void createImage(VulkanInstance& vulkanInstance, 

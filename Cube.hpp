@@ -1,6 +1,5 @@
 #ifndef CUBE_HPP
 #define CUBE_HPP
-#include <vulkan/vulkan_core.h>
 #include <vector>
 #include "Object.hpp"
 #include "Vertex.hpp"
