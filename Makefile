@@ -1,11 +1,18 @@
 STB_INCLUDE_PATH = /home/yuxin-hu/Learning/stb
 TINYOBJ_INCLUDE_PATH = /home/yuxin-hu/Learning/tinyobjloader
-CFLAGS = -std=c++17 -I$(STB_INCLUDE_PATH) -I$(TINYOBJ_INCLUDE_PATH) -Iexternal/volk
+CFLAGS = -std=c++17 -I$(STB_INCLUDE_PATH) -I$(TINYOBJ_INCLUDE_PATH)
+CFLAGS += -Iexternal/volk
+CFLAGS += -Iexternal/imgui -Iexternal/imgui/backends -DIMGUI_IMPL_VULKAN_USE_VOLK
 
 LDFLAGS = -lglfw -ldl -lpthread -lX11 -lXxf86vm -lXrandr -lXi
 
 
-SRCS = main.cpp Cube.cpp Floor.cpp VulkanInstance.cpp Camera.cpp utility.cpp Object.cpp external/volk/volk.c
+SRCS = main.cpp Cube.cpp Floor.cpp VulkanInstance.cpp Camera.cpp utility.cpp Object.cpp \
+		external/volk/volk.c \
+		external/imgui/imgui_demo.cpp external/imgui/imgui_draw.cpp external/imgui/imgui_tables.cpp external/imgui/imgui_widgets.cpp external/imgui/imgui.cpp \
+		external/imgui/backends/imgui_impl_vulkan.cpp \
+		external/imgui/backends/imgui_impl_glfw.cpp \
+		external/imgui/misc/cpp/imgui_stdlib.cpp
 OBJS = $(SRCS:.cpp=.o)
 OBJS := $(OBJS:.c=.o)
 VulkanBasic: $(OBJS)

@@ -47,9 +47,13 @@ void createImage(VulkanInstance& vulkanInstance,
     vkBindImageMemory(logicalDevice, image, imageMemory, 0);
 }
 
-void transitionImageLayout(VulkanInstance& vulkanInstance, VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout, uint32_t mipLevels) {
+void transitionImageLayoutOnetimeSubmit(VulkanInstance& vulkanInstance, VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout, uint32_t mipLevels) {
     VkCommandBuffer commandBuffer = vulkanInstance.beginSingleTimeCommands();
+    transitionImageLayout(vulkanInstance, commandBuffer, image, format, oldLayout, newLayout, mipLevels);
+    vulkanInstance.endSingleTimeCommands(commandBuffer);
+}
 
+void transitionImageLayout(VulkanInstance& vulkanInstance, VkCommandBuffer commandBuffer, VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout, uint32_t mipLevels) {
     VkImageMemoryBarrier barrier{};
     barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
     barrier.oldLayout = oldLayout;
@@ -129,7 +133,6 @@ void transitionImageLayout(VulkanInstance& vulkanInstance, VkImage image, VkForm
     }
 
     vkCmdPipelineBarrier(commandBuffer, sourceStage, destinationStage, 0, 0, nullptr, 0, nullptr, 1, &barrier);
-    vulkanInstance.endSingleTimeCommands(commandBuffer);
 }
 
 void copyBufferToImage(VulkanInstance& instance, VkBuffer buffer, VkImage image, uint32_t width, uint32_t height) {

@@ -16,7 +16,9 @@ void createImage(VulkanInstance& vulkanInstance,
                 VkImage& image,
                 VkDeviceMemory& imageMemory);
 
-void transitionImageLayout(VulkanInstance& vulkanInstance, VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout, uint32_t mipLevels);
+void transitionImageLayout(VulkanInstance& vulkanInstance, VkCommandBuffer commandBuffer, VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout, uint32_t mipLevels);
+
+void transitionImageLayoutOnetimeSubmit(VulkanInstance& vulkanInstance, VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout, uint32_t mipLevels);
 
 bool hasStencilComponent(VkFormat format);
 

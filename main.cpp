@@ -32,6 +32,10 @@
 #include "Vertex.hpp"
 #include "VulkanInstance.hpp"
 
+#include "imgui.h"
+#include "imgui_impl_glfw.h"
+#include "imgui_impl_vulkan.h"
+
 const uint32_t WIDTH = 800;
 const uint32_t HEIGHT = 600;
 const int MAX_FRAMES_IN_FLIGHT = 2;
@@ -68,6 +72,15 @@ namespace std {
     };
 }
 
+static void check_vk_result(VkResult err)
+{
+    if (err == VK_SUCCESS)
+        return;
+    fprintf(stderr, "[vulkan] Error: VkResult = %d\n", err);
+    if (err < 0)
+        abort();
+}
+
 class HelloTriangleApplication
 {
 public:
@@ -75,6 +88,7 @@ public:
     {
         initWindow();
         initVulkan();
+        initDearImGui();
         mainLoop();
         cleanup();
     }
@@ -266,7 +280,7 @@ private:
         mSwapChainImageFormat = surfaceFormat.format;
         mSwapChainExtent = extent;
         for (auto swapChainImage : mSwapChainImages) {
-            transitionImageLayout(mVulkanInstance, swapChainImage, mSwapChainImageFormat, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, 1);
+            transitionImageLayoutOnetimeSubmit(mVulkanInstance, swapChainImage, mSwapChainImageFormat, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, 1);
         }
     }
 
@@ -652,7 +666,7 @@ private:
             VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, mDepthImage, mDepthImageMemory);
         mDepthImageView = createImageView(logicalDevice, mDepthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, 1);
-        transitionImageLayout(mVulkanInstance, mDepthImage, depthFormat, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, 1);
+        transitionImageLayoutOnetimeSubmit(mVulkanInstance, mDepthImage, depthFormat, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, 1);
     }
 
     void createShadowMapDepthResources(VkPhysicalDevice physicalDevice, VkDevice logicalDevice) {
@@ -665,7 +679,7 @@ private:
             createImage(mVulkanInstance, logicalDevice, mSwapChainExtent.width, mSwapChainExtent.height, 1, VK_SAMPLE_COUNT_1_BIT, depthFormat,
                 VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT|VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, mShadowMapImages[i],mShadowMapImageMemory[i]);
             mShadowMapImageViews[i] = createImageView(logicalDevice, mShadowMapImages[i], depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, 1);
-            transitionImageLayout(mVulkanInstance, mShadowMapImages[i], depthFormat, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 1);
+            transitionImageLayoutOnetimeSubmit(mVulkanInstance, mShadowMapImages[i], depthFormat, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 1);
         }
     }
 
@@ -702,6 +716,43 @@ private:
         createCommandBuffer(mVulkanInstance.getCommandPool(), mVulkanInstance.getLogicalDevice());
         createSyncObjects(mVulkanInstance.getLogicalDevice());
     }
+
+    void initDearImGui() {
+        IMGUI_CHECKVERSION();
+        ImGui::CreateContext();
+        ImGuiIO& io = ImGui::GetIO(); (void)io;
+        io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
+        ImGui::StyleColorsDark();
+        ImGuiStyle& style = ImGui::GetStyle();
+        float main_scale = ImGui_ImplGlfw_GetContentScaleForMonitor(glfwGetPrimaryMonitor()); // Valid on GLFW 3.3+ only
+        style.ScaleAllSizes(main_scale);
+        style.FontScaleDpi = main_scale;
+        ImGui_ImplGlfw_InitForVulkan(mWindow, true);
+        ImGui_ImplVulkan_InitInfo init_info = {};
+        init_info.ApiVersion = VK_API_VERSION_1_4;
+        init_info.Instance = mVulkanInstance.getInstance();
+        init_info.PhysicalDevice = mVulkanInstance.getPhysicalDevice();
+        init_info.Device = mVulkanInstance.getLogicalDevice();
+        init_info.QueueFamily = mVulkanInstance.findQueueFamilies(mVulkanInstance.getPhysicalDevice()).graphicsFamily.value();
+        init_info.Queue = mVulkanInstance.getGraphicsQueue();
+        init_info.DescriptorPool = VK_NULL_HANDLE;
+        init_info.DescriptorPoolSize = IMGUI_IMPL_VULKAN_MINIMUM_IMAGE_SAMPLER_POOL_SIZE;
+        init_info.MinImageCount = 2;
+        init_info.ImageCount = static_cast<uint32_t>(mSwapChainImages.size());
+        init_info.PipelineCache = VK_NULL_HANDLE;
+        init_info.UseDynamicRendering = true;
+        init_info.Allocator = nullptr;
+        init_info.PipelineInfoMain.PipelineRenderingCreateInfo = {};
+        init_info.PipelineInfoMain.PipelineRenderingCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
+        init_info.PipelineInfoMain.PipelineRenderingCreateInfo.viewMask = 0;
+        init_info.PipelineInfoMain.PipelineRenderingCreateInfo.colorAttachmentCount = 1;
+        init_info.PipelineInfoMain.PipelineRenderingCreateInfo.pColorAttachmentFormats = {&mSwapChainImageFormat};
+        init_info.PipelineInfoMain.PipelineRenderingCreateInfo.depthAttachmentFormat = findDepthFormat(mVulkanInstance.getPhysicalDevice());
+        init_info.PipelineInfoMain.PipelineRenderingCreateInfo.stencilAttachmentFormat = VK_FORMAT_UNDEFINED;
+        init_info.CheckVkResultFn = check_vk_result;
+        ImGui_ImplVulkan_Init(&init_info);
+    }
+        
 
     void updateUniformBuffer(uint32_t currentImage) {
         static auto startTime = std::chrono::high_resolution_clock::now();
@@ -747,7 +798,7 @@ private:
         }
 
         VkFormat depthFormat = findDepthFormat(physicalDevice);
-        transitionImageLayout(mVulkanInstance, mShadowMapImages[imageIndex], depthFormat, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, 1);
+        transitionImageLayout(mVulkanInstance, commandBuffer, mShadowMapImages[imageIndex], depthFormat, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, 1);
         VkRenderingInfo shadowMapRenderInfo{};
         shadowMapRenderInfo.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
         VkRect2D shadowMapRenderArea{};
@@ -812,9 +863,9 @@ private:
             vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(obj->getIndices().size()), 1, 0, 0, 0);
         }
         vkCmdEndRendering(commandBuffer);
-        transitionImageLayout(mVulkanInstance, mShadowMapImages[imageIndex], depthFormat, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 1);
+        transitionImageLayout(mVulkanInstance, commandBuffer, mShadowMapImages[imageIndex], depthFormat, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 1);
 
-        transitionImageLayout(mVulkanInstance, mSwapChainImages[imageIndex], mSwapChainImageFormat, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 1);
+        transitionImageLayout(mVulkanInstance, commandBuffer, mSwapChainImages[imageIndex], mSwapChainImageFormat, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 1);
         VkRenderingInfo lambertRenderInfo{};
         lambertRenderInfo.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
         VkRect2D lambertRenderArea{};
@@ -862,7 +913,7 @@ private:
 		vkCmdSetDepthBiasEnable(commandBuffer, VK_FALSE);
 		vkCmdSetStencilTestEnable(commandBuffer, VK_FALSE);
 		vkCmdSetPrimitiveRestartEnable(commandBuffer, VK_FALSE);
-		vkCmdSetSampleMaskEXT(commandBuffer, VK_SAMPLE_COUNT_1_BIT, &sampleMask);
+		vkCmdSetSampleMaskEXT(commandBuffer, mVulkanInstance.getMsaaSamples(), &sampleMask);
 		vkCmdSetColorBlendEnableEXT(commandBuffer, 0, 1, &colorBlendEnables);
 		vkCmdSetColorWriteMaskEXT(commandBuffer, 0, 1, &colorBlendComponentFlags);
 		vkCmdSetVertexInputEXT(commandBuffer, 1, &vertexInputBinding, 3, vertexAttributes.data());
@@ -875,8 +926,11 @@ private:
             vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mLambertPipelineLayout, 0, 1, &(obj->getDescriptorSets()[currentFrameIndex]), 0, nullptr);
             vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(obj->getIndices().size()), 1, 0, 0, 0);
         }
+
+        ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer);
         vkCmdEndRendering(commandBuffer);
-        transitionImageLayout(mVulkanInstance, mSwapChainImages[imageIndex], mSwapChainImageFormat, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, 1);
+        
+        transitionImageLayout(mVulkanInstance, commandBuffer, mSwapChainImages[imageIndex], mSwapChainImageFormat, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, 1);
 
         if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS)
         {
@@ -903,6 +957,13 @@ private:
 
         updateUniformBuffer(mCurrentFrame);
         vkResetCommandBuffer(mCommandBuffers[mCurrentFrame], 0);
+
+        ImGui_ImplVulkan_NewFrame();
+        ImGui_ImplGlfw_NewFrame();
+        ImGui::NewFrame();
+        //ImGui::ShowDemoWindow();
+        ImGui::Render();
+
         recordCommandBuffer(mVulkanInstance.getPhysicalDevice(), mCommandBuffers[mCurrentFrame], imageIndex, mCurrentFrame);
 
         VkSubmitInfo submitInfo{};
@@ -1031,6 +1092,10 @@ private:
 
     void cleanup()
     {
+        ImGui_ImplVulkan_Shutdown();
+        ImGui_ImplGlfw_Shutdown();
+        ImGui::DestroyContext();
+
         VkDevice logicalDevice = mVulkanInstance.getLogicalDevice();
         cleanupSwapChain(logicalDevice);
         vkDestroySampler(logicalDevice, mShadowMapSampler, nullptr);
