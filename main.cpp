@@ -747,7 +747,7 @@ private:
         init_info.PipelineInfoMain.PipelineRenderingCreateInfo.viewMask = 0;
         init_info.PipelineInfoMain.PipelineRenderingCreateInfo.colorAttachmentCount = 1;
         init_info.PipelineInfoMain.PipelineRenderingCreateInfo.pColorAttachmentFormats = {&mSwapChainImageFormat};
-        init_info.PipelineInfoMain.PipelineRenderingCreateInfo.depthAttachmentFormat = findDepthFormat(mVulkanInstance.getPhysicalDevice());
+        init_info.PipelineInfoMain.PipelineRenderingCreateInfo.depthAttachmentFormat = VK_FORMAT_UNDEFINED;
         init_info.PipelineInfoMain.PipelineRenderingCreateInfo.stencilAttachmentFormat = VK_FORMAT_UNDEFINED;
         init_info.CheckVkResultFn = check_vk_result;
         ImGui_ImplVulkan_Init(&init_info);
@@ -927,9 +927,30 @@ private:
             vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(obj->getIndices().size()), 1, 0, 0, 0);
         }
 
+        vkCmdEndRendering(commandBuffer);
+
+        // ImGui render pass: targets the already-resolved 1-sample swapchain image.
+        // Must be a separate pass — ImGui's pipeline uses rasterizationSamples=1,
+        // which would mismatch the MSAA (8-sample) attachments above.
+        VkRenderingAttachmentInfo imguiColorAttachment{};
+        imguiColorAttachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+        imguiColorAttachment.imageView = mSwapChainImageViews[imageIndex];
+        imguiColorAttachment.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        imguiColorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+        imguiColorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+
+        VkRenderingInfo imguiRenderInfo{};
+        imguiRenderInfo.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
+        imguiRenderInfo.renderArea = {{0, 0}, mSwapChainExtent};
+        imguiRenderInfo.layerCount = 1;
+        imguiRenderInfo.colorAttachmentCount = 1;
+        imguiRenderInfo.pColorAttachments = &imguiColorAttachment;
+        // No depth attachment — ImGui is 2D UI and doesn't write depth.
+
+        vkCmdBeginRendering(commandBuffer, &imguiRenderInfo);
         ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer);
         vkCmdEndRendering(commandBuffer);
-        
+
         transitionImageLayout(mVulkanInstance, commandBuffer, mSwapChainImages[imageIndex], mSwapChainImageFormat, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, 1);
 
         if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS)
@@ -961,7 +982,7 @@ private:
         ImGui_ImplVulkan_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
-        //ImGui::ShowDemoWindow();
+        ImGui::ShowDemoWindow();
         ImGui::Render();
 
         recordCommandBuffer(mVulkanInstance.getPhysicalDevice(), mCommandBuffers[mCurrentFrame], imageIndex, mCurrentFrame);
