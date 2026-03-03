@@ -276,6 +276,29 @@ void Cube::createCubeTextureSampler(VulkanInstance& vulkanInstance) {
         }
 }
 
+void Cube::updateShadowMapDescriptorSets(VulkanInstance& vulkanInstance,
+                                const uint8_t count,
+                                const std::vector<VkImageView>& shadowMapImageViews,
+                                const VkSampler& shadowMapSampler) {
+    for (size_t i = 0; i < count; i++) {
+        VkDescriptorImageInfo shadowMapInfo{};
+        shadowMapInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        shadowMapInfo.imageView = shadowMapImageViews[i];
+        shadowMapInfo.sampler = shadowMapSampler;
+
+        VkWriteDescriptorSet shadowMapWrite{};
+        shadowMapWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        shadowMapWrite.dstSet = mDescriptorSets[i];
+        shadowMapWrite.dstBinding = 2;
+        shadowMapWrite.dstArrayElement = 0;
+        shadowMapWrite.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        shadowMapWrite.descriptorCount = 1;
+        shadowMapWrite.pImageInfo = &shadowMapInfo;
+
+        vkUpdateDescriptorSets(vulkanInstance.getLogicalDevice(), 1, &shadowMapWrite, 0, nullptr);
+    }
+}
+
 void Cube::createDescriptorSets(VulkanInstance& vulkanInstance,
                                 const uint8_t count, VkDescriptorPool& descriptorPool,
                                 const VkDescriptorSetLayout descriptorSetLayout,

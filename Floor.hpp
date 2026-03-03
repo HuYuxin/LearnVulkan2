@@ -15,6 +15,10 @@ public:
     virtual void initializeObject() override;
     virtual void createVertexBuffer(VulkanInstance& vulkanInstance) override;
     virtual void createIndexBuffer(VulkanInstance& vulkanInstance) override;
+    virtual void updateShadowMapDescriptorSets(VulkanInstance& vulkanInstance,
+                                const uint8_t count,
+                                const std::vector<VkImageView>& shadowMapImageViews,
+                                const VkSampler& shadowMapSampler) override;
     virtual void createDescriptorSets(VulkanInstance& vulkanInstance,
                                 const uint8_t count, VkDescriptorPool& descriptorPool,
                                 const VkDescriptorSetLayout descriptorSetLayout,

@@ -10,6 +10,10 @@ public:
     virtual void createTextures(VulkanInstance& vulkanInstance) = 0;
     virtual void createVertexBuffer(VulkanInstance& vulkanInstance) = 0;
     virtual void createIndexBuffer(VulkanInstance& vulkanInstance) = 0;
+    virtual void updateShadowMapDescriptorSets(VulkanInstance& vulkanInstance,
+                                const uint8_t count,
+                                const std::vector<VkImageView>& shadowMapImageViews,
+                                const VkSampler& shadowMapSampler) = 0;
     virtual void createDescriptorSets(VulkanInstance& vulkanInstance,
                                 const uint8_t count, VkDescriptorPool& descriptorPool,
                                 const VkDescriptorSetLayout descriptorSetLayout,

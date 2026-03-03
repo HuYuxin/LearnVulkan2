@@ -321,12 +321,14 @@ private:
         vkDeviceWaitIdle(logicalDevice);
 
         cleanupSwapChain(logicalDevice);
+        cleanupShadowMap(logicalDevice);
 
         createSwapChain(physicalDevice, logicalDevice, surface);
         createSwapChainImageViews(logicalDevice);
         createMultisampleColorResources(logicalDevice);
         createMultisampleDepthResources(physicalDevice, logicalDevice);
         createShadowMapDepthResources(physicalDevice, logicalDevice);
+        updateShadowMapDescriptorSets();
     }
 
     void createShadowMapGraphicsPipelineLayout(const VkDevice& logicalDevice) {
@@ -480,6 +482,12 @@ private:
             obj->createIndexBuffer(mVulkanInstance);
             obj->createTextures(mVulkanInstance);
             obj->createDescriptorSets(mVulkanInstance, MAX_FRAMES_IN_FLIGHT, mDescriptorPool, mLambertDescriptorSetLayout, mUniformsBuffers, sizeof(UniformBufferObject), mShadowMapImageViews, mShadowMapSampler);
+        }
+    }
+
+    void updateShadowMapDescriptorSets() {
+        for (Object* obj : objects) {
+            obj->updateShadowMapDescriptorSets(mVulkanInstance, MAX_FRAMES_IN_FLIGHT, mShadowMapImageViews, mShadowMapSampler);
         }
     }
 
@@ -965,7 +973,6 @@ private:
         VkPhysicalDevice physicalDevice = mVulkanInstance.getPhysicalDevice();
         VkSurfaceKHR surface = mVulkanInstance.getSurface();
         vkWaitForFences(logicalDevice, 1, &mInFlightFences[mCurrentFrame], VK_TRUE, UINT64_MAX);
-        vkResetFences(logicalDevice, 1, &mInFlightFences[mCurrentFrame]);
 
         uint32_t imageIndex;
         VkResult result = vkAcquireNextImageKHR(logicalDevice, mSwapChain, UINT64_MAX, mImageAvailableSemaphores[mCurrentFrame], VK_NULL_HANDLE, &imageIndex);
@@ -975,6 +982,11 @@ private:
         } else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
             throw std::runtime_error("failed to acquire swap chain image!");
         }
+
+        // Reset the fence only after confirming we will submit work that signals it.
+        // If we reset before the early return above, the fence is permanently unsignaled
+        // and the next vkWaitForFences call hangs forever.
+        vkResetFences(logicalDevice, 1, &mInFlightFences[mCurrentFrame]);
 
         updateUniformBuffer(mCurrentFrame);
         vkResetCommandBuffer(mCommandBuffers[mCurrentFrame], 0);
@@ -1061,13 +1073,20 @@ private:
 
         for (size_t i = 0; i < mSwapChainImageViews.size(); i++)
         {
-            vkDestroyImage(logicalDevice, mShadowMapImages[i], nullptr);
-            vkDestroyImageView(logicalDevice, mShadowMapImageViews[i], nullptr);
-            vkFreeMemory(logicalDevice, mShadowMapImageMemory[i], nullptr);
             vkDestroyImageView(logicalDevice, mSwapChainImageViews[i], nullptr);
         }
 
         vkDestroySwapchainKHR(logicalDevice, mSwapChain, nullptr);
+    }
+
+    void cleanupShadowMap(VkDevice logicalDevice)
+    {
+        for (size_t i = 0; i < mShadowMapImages.size(); ++i)
+        {
+            vkDestroyImage(logicalDevice, mShadowMapImages[i], nullptr);
+            vkDestroyImageView(logicalDevice, mShadowMapImageViews[i], nullptr);
+            vkFreeMemory(logicalDevice, mShadowMapImageMemory[i], nullptr);
+        }
     }
 
     void processInput() {
@@ -1119,6 +1138,7 @@ private:
 
         VkDevice logicalDevice = mVulkanInstance.getLogicalDevice();
         cleanupSwapChain(logicalDevice);
+        cleanupShadowMap(logicalDevice);
         vkDestroySampler(logicalDevice, mShadowMapSampler, nullptr);
         for (Object* obj : objects) {
             obj->clearResource(mVulkanInstance);
