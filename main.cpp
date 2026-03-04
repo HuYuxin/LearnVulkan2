@@ -772,13 +772,13 @@ private:
         ubo.view = glm::lookAt(mCamera->getCameraPosition(), mCamera->getCameraLookAtPosition(), mCamera->getCameraUp());
         ubo.proj = glm::perspective(mCamera->getFovY(), mCamera->getAspect(), mCamera->getNear(), mCamera->getFar());
         ubo.proj[1][1] *= -1;
-        ubo.lightPos = glm::vec3(5, 5, 5);
+        ubo.lightPos = glm::vec3(mLightPosX, mLightPosY, mLightPosZ);
 
         float nearPlane = 0.1f;
         float farPlane = 25.0f;
         glm::mat4 lightProjection = glm::ortho(-20.0f, 20.0f, -20.0f, 20.0f, nearPlane, farPlane);
         lightProjection[1][1] *= -1;
-        glm::mat4 lightView = glm::lookAt(glm::vec3(10.0f, 5.0f, 10.0f),
+        glm::mat4 lightView = glm::lookAt(glm::vec3(mLightPosX, mLightPosY, mLightPosZ),
                                   glm::vec3( 0.0f, 0.0f,  0.0f),
                                   glm::vec3( 0.0f, 1.0f,  0.0f));
         glm::mat4 lightSpaceMatrix = lightProjection * lightView;
@@ -994,7 +994,15 @@ private:
         ImGui_ImplVulkan_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
-        ImGui::ShowDemoWindow();
+        // Add your UI elements HERE:
+        ImGui::SetNextWindowSize(ImVec2(500, 100), ImGuiCond_Once);
+        ImGui::Begin("My Window");
+        ImGui::InputFloat("Light Position X", &mLightPosX, 0.1f, 1.0f, "%.1f");
+        ImGui::InputFloat("Light Position Y", &mLightPosY, 0.1f, 1.0f, "%.1f");
+        ImGui::InputFloat("Light Position Z", &mLightPosZ, 0.1f, 1.0f, "%.1f");
+        ImGui::End();
+
+        //ImGui::ShowDemoWindow();
         ImGui::Render();
 
         recordCommandBuffer(mVulkanInstance.getPhysicalDevice(), mCommandBuffers[mCurrentFrame], imageIndex, mCurrentFrame);
@@ -1217,6 +1225,9 @@ private:
     glm::vec2 mMousePos;
     glm::vec2 mMousePosPrev;
     bool mIsLeftMouseButtonPressed = false;
+    float mLightPosX = 5.0f;
+    float mLightPosY = 5.0f;
+    float mLightPosZ = 10.0f;
 };
 
 int main()
