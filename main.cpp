@@ -988,19 +988,23 @@ private:
         // and the next vkWaitForFences call hangs forever.
         vkResetFences(logicalDevice, 1, &mInFlightFences[mCurrentFrame]);
 
-        updateUniformBuffer(mCurrentFrame);
-        vkResetCommandBuffer(mCommandBuffers[mCurrentFrame], 0);
-
         ImGui_ImplVulkan_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
         // Add your UI elements HERE:
-        ImGui::SetNextWindowSize(ImVec2(500, 100), ImGuiCond_Once);
+        ImGui::SetNextWindowSize(ImVec2(500, 200), ImGuiCond_Once);
         ImGui::Begin("My Window");
         ImGui::InputFloat("Light Position X", &mLightPosX, 0.1f, 1.0f, "%.1f");
         ImGui::InputFloat("Light Position Y", &mLightPosY, 0.1f, 1.0f, "%.1f");
         ImGui::InputFloat("Light Position Z", &mLightPosZ, 0.1f, 1.0f, "%.1f");
+        ImGui::SliderFloat("Camera Yaw (Y-axis)", &mCameraYaw, -180.0f, 180.0f, "%.1f deg");
+        ImGui::SliderFloat("Camera Pitch (X-axis)", &mCameraPitch, -89.0f, 89.0f, "%.1f deg");
         ImGui::End();
+
+        processInput();
+
+        updateUniformBuffer(mCurrentFrame);
+        vkResetCommandBuffer(mCommandBuffers[mCurrentFrame], 0);
 
         //ImGui::ShowDemoWindow();
         ImGui::Render();
@@ -1058,7 +1062,6 @@ private:
         while (!glfwWindowShouldClose(mWindow))
         {
             glfwPollEvents();
-            processInput();
             drawFrame();
         }
 
@@ -1117,24 +1120,16 @@ private:
             mCamera->translate(CameraMovement::DOWN);
         }
 
-        if (glfwGetMouseButton(mWindow, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
-            double xpos, ypos;
-            glfwGetCursorPos(mWindow, &xpos, &ypos);
-            if (!mIsLeftMouseButtonPressed) {
-                mIsLeftMouseButtonPressed = true;
-                mMousePos = glm::vec2(xpos, ypos);
-                mMousePosPrev = mMousePos;
-            } else {
-                mMousePosPrev = mMousePos;
-                mMousePos = glm::vec2(xpos, ypos);
-                glm::vec2 delta = mMousePos - mMousePosPrev;
-                if (delta.x != 0 || delta.y != 0) {
-                    mCamera->rotateAroundCameraUpAxis(-delta.x * 0.1);
-                    mCamera->rotateAroundCameraLeftAxis(delta.y * 0.1);
-                }
-            }
-        } else {
-            mIsLeftMouseButtonPressed = false;
+        float deltaYaw = mCameraYaw - mCameraYawPrev;
+        float deltaPitch = mCameraPitch - mCameraPitchPrev;
+
+        if (deltaYaw != 0.0f) {
+            mCamera->rotateAroundCameraUpAxis(deltaYaw);
+            mCameraYawPrev = mCameraYaw;
+        }
+        if (deltaPitch != 0.0f) {
+            mCamera->rotateAroundCameraLeftAxis(deltaPitch);
+            mCameraPitchPrev = mCameraPitch;
         }
     }
 
@@ -1222,9 +1217,10 @@ private:
     VkDescriptorPool mDescriptorPool;
     std::vector<VkDescriptorSet> mShadowMapDescriptorSets;
     Camera* mCamera;
-    glm::vec2 mMousePos;
-    glm::vec2 mMousePosPrev;
-    bool mIsLeftMouseButtonPressed = false;
+    float mCameraYaw = 0.0f;
+    float mCameraYawPrev = 0.0f;
+    float mCameraPitch = 0.0f;
+    float mCameraPitchPrev = 0.0f;
     float mLightPosX = 5.0f;
     float mLightPosY = 5.0f;
     float mLightPosZ = 10.0f;
