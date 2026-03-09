@@ -1,6 +1,5 @@
-STB_INCLUDE_PATH = /home/yuxin-hu/Learning/stb
-TINYOBJ_INCLUDE_PATH = /home/yuxin-hu/Learning/tinyobjloader
-CFLAGS = -std=c++17 -I$(STB_INCLUDE_PATH) -I$(TINYOBJ_INCLUDE_PATH)
+CFLAGS = -std=c++17
+CFLAGS += -Iexternal/stb
 CFLAGS += -Iexternal/volk
 CFLAGS += -Iexternal/imgui -Iexternal/imgui/backends -DIMGUI_IMPL_VULKAN_USE_VOLK
 

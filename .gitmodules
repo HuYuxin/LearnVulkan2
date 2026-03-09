@@ -8,3 +8,6 @@
 	path = external/tinygltf
 	url = https://github.com/syoyo/tinygltf.git
 	branch = release
+[submodule "external/stb"]
+	path = external/stb
+	url = https://github.com/nothings/stb.git

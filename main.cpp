@@ -1,7 +1,6 @@
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
-#define STB_IMAGE_IMPLEMENTATION
-#define TINYOBJLOADER_IMPLEMENTATION
+
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/hash.hpp>
 #include <GLFW/glfw3.h>
@@ -9,8 +8,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <chrono>
 
-#include <stb_image.h>
-#include <tiny_obj_loader.h>
+
 
 #include <algorithm>
 #include <array>
