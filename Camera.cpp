@@ -3,9 +3,9 @@
 
 Camera::Camera(const float swapchainExtentWidth, const float swapchainExtentHeight) : mFovY(glm::radians(45.0f)),
                     mAspect(swapchainExtentWidth / swapchainExtentHeight),
-                    mNear(0.1f),
-                    mFar(100.0f),
-                    mPosition(glm::vec3(-20.0f, 10.0f, -20.0f)),
+                    mNear(0.01f),
+                    mFar(10.0f),
+                    mPosition(glm::vec3(0.0f, 0.03f, -0.15f)),
                     mUp(glm::vec3(0.0f, 1.0f, 0.0f)),
                     mForward(glm::vec3(0.0f, 0.0f, 1.0f))
                  {}
@@ -38,25 +38,25 @@ float Camera::getFar() const {
     return mFar;
 }
 
-void Camera::translate(const CameraMovement movement) {
+void Camera::translate(const CameraMovement movement, const float movementSpeed) {
     switch (movement) {
         case CameraMovement::FORWARD:
-            mPosition = mPosition + mForward;
+            mPosition = mPosition + mForward * movementSpeed;
             break;
         case CameraMovement::BACKWARD:
-            mPosition = mPosition + (-1.0f) * mForward;
+            mPosition = mPosition + (-1.0f) * mForward * movementSpeed;
             break;
         case CameraMovement::UP:
-            mPosition = mPosition + mUp;
+            mPosition = mPosition + mUp * movementSpeed;
             break;
         case CameraMovement::DOWN:
-            mPosition = mPosition + (-1.0f) * mUp;
+            mPosition = mPosition + (-1.0f) * mUp * movementSpeed;
             break;
         case CameraMovement::LEFT:
-            mPosition = mPosition + glm::normalize(glm::cross(mUp, mForward));
+            mPosition = mPosition + glm::normalize(glm::cross(mUp, mForward)) * movementSpeed;
             break;
         case CameraMovement::RIGHT:
-            mPosition = mPosition + (-1.0f) * glm::normalize(glm::cross(mUp, mForward));
+            mPosition = mPosition + (-1.0f) * glm::normalize(glm::cross(mUp, mForward)) * movementSpeed;
             break;
         default:
             // Do not move

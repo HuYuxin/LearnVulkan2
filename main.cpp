@@ -23,6 +23,7 @@
 #include <vector>
 #include <unordered_map>
 
+#include "Avocado.hpp"
 #include "Camera.hpp"
 #include "Cube.hpp"
 #include "Floor.hpp"
@@ -292,23 +293,6 @@ private:
         }
     }
 
-    void createShadowMapDescriptorSetLayout(const VkDevice& logicalDevice) {
-        VkDescriptorSetLayoutBinding shadowMapUboLayoutBinding{};
-        shadowMapUboLayoutBinding.binding = 0;
-        shadowMapUboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        shadowMapUboLayoutBinding.descriptorCount = 1;
-        shadowMapUboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-        shadowMapUboLayoutBinding.pImmutableSamplers = nullptr;
-        std::array<VkDescriptorSetLayoutBinding, 1> shadowMapBindings = {shadowMapUboLayoutBinding};
-        VkDescriptorSetLayoutCreateInfo layoutInfo{};
-        layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-        layoutInfo.bindingCount = static_cast<uint32_t> (shadowMapBindings.size());
-        layoutInfo.pBindings = shadowMapBindings.data();
-        if(vkCreateDescriptorSetLayout(logicalDevice, &layoutInfo, nullptr, &mShadowMapDescriptorSetLayout) != VK_SUCCESS) {
-            throw std::runtime_error("failed to create shadow map descriptor set layout!");
-        }
-    }
-
     void recreateSwapChain(VkPhysicalDevice physicalDevice, VkDevice logicalDevice, VkSurfaceKHR surface)
     {
         int width = 0, height = 0;
@@ -329,13 +313,34 @@ private:
         updateShadowMapDescriptorSets();
     }
 
+    void createShadowMapDescriptorSetLayout(const VkDevice& logicalDevice) {
+        VkDescriptorSetLayoutBinding shadowMapUboLayoutBinding{};
+        shadowMapUboLayoutBinding.binding = 0;
+        shadowMapUboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        shadowMapUboLayoutBinding.descriptorCount = 1;
+        shadowMapUboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+        shadowMapUboLayoutBinding.pImmutableSamplers = nullptr;
+        std::array<VkDescriptorSetLayoutBinding, 1> shadowMapBindings = {shadowMapUboLayoutBinding};
+        VkDescriptorSetLayoutCreateInfo layoutInfo{};
+        layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+        layoutInfo.bindingCount = static_cast<uint32_t> (shadowMapBindings.size());
+        layoutInfo.pBindings = shadowMapBindings.data();
+        if(vkCreateDescriptorSetLayout(logicalDevice, &layoutInfo, nullptr, &mShadowMapDescriptorSetLayout) != VK_SUCCESS) {
+            throw std::runtime_error("failed to create shadow map descriptor set layout!");
+        }
+    }
+
     void createShadowMapGraphicsPipelineLayout(const VkDevice& logicalDevice) {
         VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
         pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
         pipelineLayoutInfo.setLayoutCount = 1;
         pipelineLayoutInfo.pSetLayouts = &mShadowMapDescriptorSetLayout;
-        pipelineLayoutInfo.pushConstantRangeCount = 0;
-        pipelineLayoutInfo.pPushConstantRanges = nullptr;
+        VkPushConstantRange pushConstantRange {};
+		pushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+		pushConstantRange.offset = 0;
+		pushConstantRange.size = sizeof(glm::mat4);
+        pipelineLayoutInfo.pushConstantRangeCount = 1;
+        pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
         if (vkCreatePipelineLayout(logicalDevice, &pipelineLayoutInfo, nullptr, &mShadowMapPipelineLayout) != VK_SUCCESS)
         {
             throw std::runtime_error("failed to create shadowmap pipeline layout!");
@@ -343,6 +348,11 @@ private:
     }
 
     void createShadowMapShaderObjects(const VkDevice& logicalDevice) {
+        VkPushConstantRange pushConstantRange{};
+        pushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+        pushConstantRange.offset = 0;
+        pushConstantRange.size = sizeof(glm::mat4);
+
         VkShaderEXT shadowMapVertexShaderObject;
         size_t shadowMapVertexShaderCodeSize = 0;
         std::vector<char>  shadowMapVertexShaderCode = readFile("shaders/shadowMapVert.spv", shadowMapVertexShaderCodeSize);
@@ -357,6 +367,8 @@ private:
         shadowMapVertexShaderCreateInfo.pName = "main";
         shadowMapVertexShaderCreateInfo.setLayoutCount = 1;
         shadowMapVertexShaderCreateInfo.pSetLayouts = &mShadowMapDescriptorSetLayout;
+        shadowMapVertexShaderCreateInfo.pushConstantRangeCount = 1;
+        shadowMapVertexShaderCreateInfo.pPushConstantRanges = &pushConstantRange;
         if (vkCreateShadersEXT(logicalDevice, 1, &shadowMapVertexShaderCreateInfo, nullptr, &shadowMapVertexShaderObject) != VK_SUCCESS) {
             throw std::runtime_error("failed to create shadowmap vertex shader object!");
         }
@@ -374,6 +386,8 @@ private:
         shadowMapFragmentShaderCreateInfo.pName = "main";
         shadowMapFragmentShaderCreateInfo.setLayoutCount = 1;
         shadowMapFragmentShaderCreateInfo.pSetLayouts = &mShadowMapDescriptorSetLayout;
+        shadowMapFragmentShaderCreateInfo.pushConstantRangeCount = 1;
+        shadowMapFragmentShaderCreateInfo.pPushConstantRanges = &pushConstantRange;
 
         if(vkCreateShadersEXT(logicalDevice, 1, &shadowMapFragmentShaderCreateInfo, nullptr, &shadowMapFragmentShaderObject) != VK_SUCCESS) {
             throw std::runtime_error("failed to create shadowmap fragment shader object!");
@@ -382,38 +396,12 @@ private:
         mShadowMapShaderObjects[1] = std::move(shadowMapFragmentShaderObject);
     }
 
-    void createLambertDescriptorSetLayout(const VkDevice& logicalDevice) {
-        std::vector<VkDescriptorSetLayoutBinding> lambertUniformBindings;
-        lambertUniformBindings.resize(3);
-
-        lambertUniformBindings[0].binding = 0;
-        lambertUniformBindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        lambertUniformBindings[0].descriptorCount = 1;
-        lambertUniformBindings[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
-        lambertUniformBindings[0].pImmutableSamplers = nullptr;
-
-        lambertUniformBindings[1].binding = 1;
-        lambertUniformBindings[1].descriptorCount = 1;
-        lambertUniformBindings[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        lambertUniformBindings[1].pImmutableSamplers = nullptr;
-        lambertUniformBindings[1].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-
-        lambertUniformBindings[2].binding = 2;
-        lambertUniformBindings[2].descriptorCount = 1;
-        lambertUniformBindings[2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        lambertUniformBindings[2].pImmutableSamplers = nullptr;
-        lambertUniformBindings[2].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-
-        VkDescriptorSetLayoutCreateInfo layoutInfo{};
-        layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-        layoutInfo.bindingCount = static_cast<uint32_t>(lambertUniformBindings.size());
-        layoutInfo.pBindings = lambertUniformBindings.data();
-        if (vkCreateDescriptorSetLayout(logicalDevice, &layoutInfo, nullptr, &mLambertDescriptorSetLayout) != VK_SUCCESS) {
-            throw std::runtime_error("failed to create lambert descriptor set layout!");
-        }
-    }
-
     void createLambertShaderObjects(const VkDevice& logicalDevice) {
+        VkPushConstantRange pushConstantRange{};
+        pushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+        pushConstantRange.offset = 0;
+        pushConstantRange.size = sizeof(glm::mat4);
+
         VkShaderEXT lambertVertexShaderObject;
         size_t lambertVertexShaderCodeSize = 0;
         std::vector<char>  lambertVertexShaderCode = readFile("shaders/lambertVert.spv", lambertVertexShaderCodeSize);
@@ -426,8 +414,11 @@ private:
         lambertVertexShaderCreateInfo.pCode = lambertVertexShaderCode.data();
         lambertVertexShaderCreateInfo.codeSize = lambertVertexShaderCodeSize;
         lambertVertexShaderCreateInfo.pName = "main";
-        lambertVertexShaderCreateInfo.setLayoutCount = 1;
-        lambertVertexShaderCreateInfo.pSetLayouts = &mLambertDescriptorSetLayout;
+        std::array<VkDescriptorSetLayout, 3> lambertSetLayouts = mAvocado->getDescriptorSetLayouts();
+        lambertVertexShaderCreateInfo.setLayoutCount = lambertSetLayouts.size();
+        lambertVertexShaderCreateInfo.pSetLayouts = lambertSetLayouts.data();
+        lambertVertexShaderCreateInfo.pushConstantRangeCount = 1;
+        lambertVertexShaderCreateInfo.pPushConstantRanges = &pushConstantRange;
         if (vkCreateShadersEXT(logicalDevice, 1, &lambertVertexShaderCreateInfo, nullptr, &lambertVertexShaderObject) != VK_SUCCESS) {
             throw std::runtime_error("failed to create lambert vertex shader object!");
         }
@@ -443,8 +434,10 @@ private:
         lambertFragmentShaderCreateInfo.pCode = lambertFragmentShaderCode.data();
         lambertFragmentShaderCreateInfo.codeSize = lambertFragmentShaderCodeSize;
         lambertFragmentShaderCreateInfo.pName = "main";
-        lambertFragmentShaderCreateInfo.setLayoutCount = 1;
-        lambertFragmentShaderCreateInfo.pSetLayouts = &mLambertDescriptorSetLayout;
+        lambertFragmentShaderCreateInfo.setLayoutCount = 3;
+        lambertFragmentShaderCreateInfo.pSetLayouts = lambertSetLayouts.data();
+        lambertFragmentShaderCreateInfo.pushConstantRangeCount = 1;
+        lambertFragmentShaderCreateInfo.pPushConstantRanges = &pushConstantRange;
 
         if(vkCreateShadersEXT(logicalDevice, 1, &lambertFragmentShaderCreateInfo, nullptr, &lambertFragmentShaderObject) != VK_SUCCESS) {
             throw std::runtime_error("failed to create lambert fragment shader object!");
@@ -456,10 +449,15 @@ private:
     void createLambertGraphicsPipelineLayout(const VkDevice& logicalDevice) {
         VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
         pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-        pipelineLayoutInfo.setLayoutCount = 1;
-        pipelineLayoutInfo.pSetLayouts = &mLambertDescriptorSetLayout;
-        pipelineLayoutInfo.pushConstantRangeCount = 0;
-        pipelineLayoutInfo.pPushConstantRanges = nullptr;
+        std::array<VkDescriptorSetLayout, 3> lambertSetLayouts = mAvocado->getDescriptorSetLayouts();
+        pipelineLayoutInfo.setLayoutCount = lambertSetLayouts.size();
+        pipelineLayoutInfo.pSetLayouts = lambertSetLayouts.data();
+        VkPushConstantRange pushConstantRange {};
+		pushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+		pushConstantRange.offset = 0;
+		pushConstantRange.size = sizeof(glm::mat4);
+        pipelineLayoutInfo.pushConstantRangeCount = 1;
+        pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
         if (vkCreatePipelineLayout(logicalDevice, &pipelineLayoutInfo, nullptr, &mLambertPipelineLayout) != VK_SUCCESS)
         {
             throw std::runtime_error("failed to create pipeline layout!");
@@ -467,26 +465,18 @@ private:
     }
 
     void loadObjects() {
-        Object* cube = new Cube();
-        objects.push_back(cube);
-        Object* floor = new Floor();
-        objects.push_back(floor);
+        mAvocado = new Avocado(&mVulkanInstance);
     }
 
     void initializeObjects() {
-        for (Object* obj : objects) {
-            obj->initializeObject();
-            obj->createVertexBuffer(mVulkanInstance);
-            obj->createIndexBuffer(mVulkanInstance);
-            obj->createTextures(mVulkanInstance);
-            obj->createDescriptorSets(mVulkanInstance, MAX_FRAMES_IN_FLIGHT, mDescriptorPool, mLambertDescriptorSetLayout, mUniformsBuffers, sizeof(UniformBufferObject), mShadowMapImageViews, mShadowMapSampler);
-        }
+        mAvocado->initialize();
+        mAvocado->createVertexBuffer();
+        mAvocado->createIndexBuffer();
+        mAvocado->setupDescriptors(MAX_FRAMES_IN_FLIGHT, mUniformsBuffers, sizeof(UniformBufferObject), mShadowMapImageViews, mShadowMapSampler);
     }
 
     void updateShadowMapDescriptorSets() {
-        for (Object* obj : objects) {
-            obj->updateShadowMapDescriptorSets(mVulkanInstance, MAX_FRAMES_IN_FLIGHT, mShadowMapImageViews, mShadowMapSampler);
-        }
+        mAvocado->updateShadowMapDescriptorSets(MAX_FRAMES_IN_FLIGHT, mShadowMapImageViews, mShadowMapSampler);
     }
 
     struct UniformBufferObject {
@@ -710,15 +700,14 @@ private:
         createUniformBuffers(mVulkanInstance.getLogicalDevice());
         createShadowMapSampler(mVulkanInstance.getPhysicalDevice(), mVulkanInstance.getLogicalDevice());
         createDescriptorPool(mVulkanInstance.getLogicalDevice());
+        loadObjects();
+        initializeObjects();
         createShadowMapDescriptorSetLayout(mVulkanInstance.getLogicalDevice());
         createShadowMapDescriptorSets(mVulkanInstance.getLogicalDevice());
         createShadowMapShaderObjects(mVulkanInstance.getLogicalDevice());
         createShadowMapGraphicsPipelineLayout(mVulkanInstance.getLogicalDevice());
-        createLambertDescriptorSetLayout(mVulkanInstance.getLogicalDevice());
         createLambertShaderObjects(mVulkanInstance.getLogicalDevice());
         createLambertGraphicsPipelineLayout(mVulkanInstance.getLogicalDevice());
-        loadObjects();
-        initializeObjects();
         createCommandBuffer(mVulkanInstance.getCommandPool(), mVulkanInstance.getLogicalDevice());
         createSyncObjects(mVulkanInstance.getLogicalDevice());
     }
@@ -855,19 +844,13 @@ private:
 		const VkColorComponentFlags colorBlendComponentFlags = 0xf;
 		vkCmdSetColorBlendEnableEXT(commandBuffer, 0, 1, &colorBlendEnables);
 		vkCmdSetColorWriteMaskEXT(commandBuffer, 0, 1, &colorBlendComponentFlags);
-        VkVertexInputBindingDescription2EXT vertexInputBinding = Vertex::getBindingDescription2EXT();
-		std::array<VkVertexInputAttributeDescription2EXT, 3> vertexAttributes = Vertex::getAttributeDescriptions2EXT();
-		vkCmdSetVertexInputEXT(commandBuffer, 1, &vertexInputBinding, 3, vertexAttributes.data());
+        VkVertexInputBindingDescription2EXT vertexInputBinding = mAvocado->getBindingDescription2EXT();
+		std::array<VkVertexInputAttributeDescription2EXT, 3> vertexAttributes = mAvocado->getAttributeDescriptions2EXT();
+        vkCmdSetVertexInputEXT(commandBuffer, 1, &vertexInputBinding, 3, vertexAttributes.data());
         vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mShadowMapPipelineLayout, 0, 1, &mShadowMapDescriptorSets[currentFrameIndex], 0, nullptr);
-        
         std::array<VkShaderStageFlagBits, 2> shaderStageBits = {VK_SHADER_STAGE_VERTEX_BIT, VK_SHADER_STAGE_FRAGMENT_BIT};
         vkCmdBindShadersEXT(commandBuffer, 2, &shaderStageBits[0], &mShadowMapShaderObjects[0]);
-        for (Object* obj : objects) {
-            VkBuffer vertexBuffers[] = {obj->getVertexBuffer()};
-            vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
-            vkCmdBindIndexBuffer(commandBuffer, obj->getIndexBuffer(), 0, VK_INDEX_TYPE_UINT32);
-            vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(obj->getIndices().size()), 1, 0, 0, 0);
-        }
+        mAvocado->draw(commandBuffer, mShadowMapPipelineLayout, currentFrameIndex, true);
         vkCmdEndRendering(commandBuffer);
         transitionImageLayout(mVulkanInstance, commandBuffer, mShadowMapImages[imageIndex], depthFormat, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 1);
 
@@ -924,14 +907,9 @@ private:
 		vkCmdSetColorWriteMaskEXT(commandBuffer, 0, 1, &colorBlendComponentFlags);
 		vkCmdSetVertexInputEXT(commandBuffer, 1, &vertexInputBinding, 3, vertexAttributes.data());
         vkCmdBindShadersEXT(commandBuffer, 2, &shaderStageBits[0], &mLambertShaderObjects[0]);
-
-        for (Object* obj : objects) {
-            VkBuffer vertexBuffers[] = {obj->getVertexBuffer()};
-            vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
-            vkCmdBindIndexBuffer(commandBuffer, obj->getIndexBuffer(), 0, VK_INDEX_TYPE_UINT32);
-            vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mLambertPipelineLayout, 0, 1, &(obj->getDescriptorSets()[currentFrameIndex]), 0, nullptr);
-            vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(obj->getIndices().size()), 1, 0, 0, 0);
-        }
+        vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mLambertPipelineLayout, 0, 1, mAvocado->getUBODescriptorSet(currentFrameIndex), 0, nullptr);
+        vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mLambertPipelineLayout, 1, 1, mAvocado->getShadowMapDescriptorSet(currentFrameIndex), 0, nullptr);
+        mAvocado->draw(commandBuffer, mLambertPipelineLayout, currentFrameIndex, false);
 
         vkCmdEndRendering(commandBuffer);
 
@@ -1100,22 +1078,22 @@ private:
 
     void processInput() {
         if (glfwGetKey(mWindow, GLFW_KEY_W) == GLFW_PRESS) {
-            mCamera->translate(CameraMovement::FORWARD);
+            mCamera->translate(CameraMovement::FORWARD, 0.01f);
         }
         if (glfwGetKey(mWindow, GLFW_KEY_S) == GLFW_PRESS) {
-            mCamera->translate(CameraMovement::BACKWARD);
+            mCamera->translate(CameraMovement::BACKWARD, 0.01f);
         }
         if (glfwGetKey(mWindow, GLFW_KEY_A) == GLFW_PRESS) {
-            mCamera->translate(CameraMovement::LEFT);
+            mCamera->translate(CameraMovement::LEFT, 0.01f);
         }
         if (glfwGetKey(mWindow, GLFW_KEY_D) == GLFW_PRESS) {
-            mCamera->translate(CameraMovement::RIGHT);
+            mCamera->translate(CameraMovement::RIGHT, 0.01f);
         }
         if (glfwGetKey(mWindow, GLFW_KEY_R) == GLFW_PRESS) {
-            mCamera->translate(CameraMovement::UP);
+            mCamera->translate(CameraMovement::UP, 0.01f);
         }
         if (glfwGetKey(mWindow, GLFW_KEY_F) == GLFW_PRESS) {
-            mCamera->translate(CameraMovement::DOWN);
+            mCamera->translate(CameraMovement::DOWN, 0.01f);
         }
 
         float deltaYaw = mCameraYaw - mCameraYawPrev;
@@ -1141,9 +1119,7 @@ private:
         cleanupSwapChain(logicalDevice);
         cleanupShadowMap(logicalDevice);
         vkDestroySampler(logicalDevice, mShadowMapSampler, nullptr);
-        for (Object* obj : objects) {
-            obj->clearResource(mVulkanInstance);
-        }
+        mAvocado->clearResource();
         for (VkShaderEXT& shadowMapShaderObject : mShadowMapShaderObjects) {
             vkDestroyShaderEXT(logicalDevice, shadowMapShaderObject, nullptr);
         }
@@ -1161,7 +1137,7 @@ private:
         vkDestroyDescriptorPool(logicalDevice, mDescriptorPool, nullptr);
         vkDestroyDescriptorSetLayout(logicalDevice, mShadowMapDescriptorSetLayout, nullptr);
         vkDestroyPipelineLayout(logicalDevice, mShadowMapPipelineLayout, nullptr);
-        vkDestroyDescriptorSetLayout(logicalDevice, mLambertDescriptorSetLayout, nullptr);
+        //vkDestroyDescriptorSetLayout(logicalDevice, mLambertDescriptorSetLayout, nullptr);
         vkDestroyPipelineLayout(logicalDevice, mLambertPipelineLayout, nullptr);
         for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
         {
@@ -1190,7 +1166,7 @@ private:
     VkDescriptorSetLayout mShadowMapDescriptorSetLayout;
     VkPipelineLayout mShadowMapPipelineLayout;
     std::array<VkShaderEXT, 2> mShadowMapShaderObjects;
-    VkDescriptorSetLayout mLambertDescriptorSetLayout;
+    //VkDescriptorSetLayout mLambertDescriptorSetLayout;
     std::array<VkShaderEXT, 2> mLambertShaderObjects;
     VkPipelineLayout mLambertPipelineLayout;
     std::vector<VkCommandBuffer> mCommandBuffers;
@@ -1199,7 +1175,8 @@ private:
     std::vector<VkFence> mInFlightFences;
     uint32_t mCurrentFrame = 0;
     bool framebufferResized = false;
-    std::vector<Object*> objects;
+    Avocado* mAvocado;
+    //std::vector<Object*> objects;
     VkImage mDepthImage;
     VkDeviceMemory mDepthImageMemory;
     VkImageView mDepthImageView;

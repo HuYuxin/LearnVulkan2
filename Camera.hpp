@@ -21,7 +21,7 @@ public:
     float getAspect() const;
     float getNear() const;
     float getFar() const;
-    void translate(const CameraMovement movement);
+    void translate(const CameraMovement movement, const float movementSpeed);
     void rotateAroundCameraUpAxis(const float angle);
     void rotateAroundCameraLeftAxis(const float angle);
 

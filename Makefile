@@ -1,4 +1,5 @@
 CFLAGS = -std=c++17
+CFLAGS += -Werror=return-type
 CFLAGS += -Iexternal/stb
 CFLAGS += -Iexternal/volk
 CFLAGS += -Iexternal/imgui -Iexternal/imgui/backends -DIMGUI_IMPL_VULKAN_USE_VOLK
@@ -6,7 +7,7 @@ CFLAGS += -Iexternal/imgui -Iexternal/imgui/backends -DIMGUI_IMPL_VULKAN_USE_VOL
 LDFLAGS = -lglfw -ldl -lpthread -lX11 -lXxf86vm -lXrandr -lXi
 
 
-SRCS = main.cpp Cube.cpp Floor.cpp VulkanInstance.cpp Camera.cpp utility.cpp Object.cpp \
+SRCS = main.cpp Cube.cpp Floor.cpp VulkanInstance.cpp Camera.cpp utility.cpp Object.cpp Avocado.cpp\
 		external/volk/volk.c \
 		external/imgui/imgui_demo.cpp external/imgui/imgui_draw.cpp external/imgui/imgui_tables.cpp external/imgui/imgui_widgets.cpp external/imgui/imgui.cpp \
 		external/imgui/backends/imgui_impl_vulkan.cpp \
