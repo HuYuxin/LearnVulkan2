@@ -1100,11 +1100,11 @@ private:
         float deltaPitch = mCameraPitch - mCameraPitchPrev;
 
         if (deltaYaw != 0.0f) {
-            mCamera->rotateAroundCameraUpAxis(deltaYaw);
+            mCamera->orbitAroundObjectUpAxis(deltaYaw, 0.0f, 0.0f);
             mCameraYawPrev = mCameraYaw;
         }
         if (deltaPitch != 0.0f) {
-            mCamera->rotateAroundCameraLeftAxis(deltaPitch);
+            mCamera->orbitAroundObjectHorizontalAxis(deltaPitch, 0.0f, 0.0f, 0.0f);
             mCameraPitchPrev = mCameraPitch;
         }
     }

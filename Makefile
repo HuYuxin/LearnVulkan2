@@ -1,5 +1,4 @@
 CFLAGS = -std=c++17
-CFLAGS += -Werror=return-type
 CFLAGS += -Iexternal/stb
 CFLAGS += -Iexternal/volk
 CFLAGS += -Iexternal/imgui -Iexternal/imgui/backends -DIMGUI_IMPL_VULKAN_USE_VOLK

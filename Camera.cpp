@@ -64,31 +64,50 @@ void Camera::translate(const CameraMovement movement, const float movementSpeed)
     }
 }
 
-void Camera::rotateAroundCameraUpAxis(const float angle) {
-    glm::vec3 cameraLeft = glm::cross(mUp, mForward);
-    glm::vec3 rotationAxis = glm::cross(mForward, cameraLeft);
+void Camera::orbitAroundObjectUpAxis(const float angle, const float x, const float z) {
+    // Pivot point: the object's xz location, at the camera's y height
+    glm::vec3 pivot(x, mPosition.y, z);
 
-    // 1. Create a 3x3 rotation matrix directly
-    // glm::mat3(glm::rotate(...)) extracts the top-left 3x3 sub-matrix.
-    glm::mat3 rotationMatrix3 = glm::mat3(glm::rotate(glm::mat4(1.0f), 
-                                                 glm::radians(angle), 
+    // Rotation axis: world up (0, 1, 0)
+    glm::vec3 rotationAxis(0.0f, 1.0f, 0.0f);
+
+    // 1. Translate camera position relative to pivot
+    glm::vec3 relativePos = mPosition - pivot;
+
+    // 2. Rotate the relative position around the Y-axis
+    glm::mat3 rotationMatrix = glm::mat3(glm::rotate(glm::mat4(1.0f),
+                                                 glm::radians(angle),
                                                  rotationAxis));
+    relativePos = rotationMatrix * relativePos;
 
-    // 2. Perform Matrix * Vector multiplication with vec3 and mat3
-    mForward = rotationMatrix3 * mForward;
+    // 3. Translate back
+    mPosition = pivot + relativePos;
+
+    // 4. Rotate the forward vector so the camera keeps looking toward the pivot
+    mForward = rotationMatrix * mForward;
     mForward = glm::normalize(mForward);
 }
 
-void Camera::rotateAroundCameraLeftAxis(const float angle) {
+void Camera::orbitAroundObjectHorizontalAxis(const float angle, float x, float y, float z) {
+    // Pivot point
+    glm::vec3 pivot(x, y, z);
+
+    // Rotation axis
     glm::vec3 rotationAxis = glm::cross(mUp, mForward);
 
-    // 1. Create a 3x3 rotation matrix directly
-    // glm::mat3(glm::rotate(...)) extracts the top-left 3x3 sub-matrix.
-    glm::mat3 rotationMatrix3 = glm::mat3(glm::rotate(glm::mat4(1.0f), 
+    // 1. Translate camera position relative to pivot
+    glm::vec3 relativePos = mPosition - pivot;
+
+    // 2. Rotate the relative position
+    glm::mat3 rotationMatrix = glm::mat3(glm::rotate(glm::mat4(1.0f),
                                                  glm::radians(angle), 
                                                  rotationAxis));
+    relativePos = rotationMatrix * relativePos;
 
-    // 2. Perform Matrix * Vector multiplication with vec3 and mat3
-    mForward = rotationMatrix3 * mForward;
+    // 3. Translate back
+    mPosition = pivot + relativePos;
+
+    // 4. Rotate the forward vector so the camera keeps looking toward the pivot
+    mForward = rotationMatrix * mForward;
     mForward = glm::normalize(mForward);
 }
