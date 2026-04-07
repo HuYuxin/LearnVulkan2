@@ -39,7 +39,7 @@ Avocado::~Avocado() {
 }
 
 void Avocado::initialize() {
-    loadglTFFile("/home/yuxin-hu/Learning/glTF-Sample-Models/2.0/Avocado/glTF/Avocado.gltf");
+    loadglTFFile("external/glTF-Sample-Assets/Models/Avocado/glTF/Avocado.gltf");
 }
 
 void Avocado::loadglTFFile(std::string filename)

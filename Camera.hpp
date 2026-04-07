@@ -23,7 +23,7 @@ public:
     float getFar() const;
     void translate(const CameraMovement movement, const float movementSpeed);
     void orbitAroundObjectUpAxis(const float angle, const float x, const float z);
-    void rotateAroundCameraLeftAxis(const float angle, const float x, const float y, const float z);
+    void orbitAroundObjectHorizontalAxis(const float angle, const float x, const float y, const float z);
 
 private:
     glm::vec3 mPosition;
