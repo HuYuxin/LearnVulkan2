@@ -311,12 +311,12 @@ void Avocado::setupDescriptors(const uint8_t framesInFlightCount,
                         const std::vector<VkImageView>& shadowMapImageViews,
                         const VkSampler& shadowMapSampler) {
     std::array<VkDescriptorPoolSize, 2> poolSizes{};
+    // 1 descriptor set for ubo, per frame in flight
     poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     poolSizes[0].descriptorCount = framesInFlightCount;
+    // 1 descriptor set for shadow map and 1 descriptor set for each texture, per frame in flight
     poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    // 1 descriptor set for shadow map and 1 descriptor set for each texture
     poolSizes[1].descriptorCount = static_cast<uint32_t>(mImages.size() + 1) * framesInFlightCount;
-    // 1 descriptor set for UBO, 1 descriptor set for shadow map and 1 descriptor set for each texture
     const uint32_t maxDescriptorSetCount = (2 + static_cast<uint32_t>(mImages.size())) * framesInFlightCount; 
 
     VkDescriptorPoolCreateInfo poolInfo{};
