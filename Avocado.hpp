@@ -113,7 +113,7 @@ private:
 
     struct Material {
         glm::vec4 baseColorFactor;
-        uint32_t baseColorTextureIndex;
+        int32_t baseColorTextureIndex;
     };
 
     struct TextureGPUData {

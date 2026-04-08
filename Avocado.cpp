@@ -509,9 +509,9 @@ void Avocado::drawNode(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineL
 		for (Primitive& primitive : node->mesh.primitives) {
 			if (primitive.indexCount > 0) {
 				// Get the texture index for this primitive
-				Texture texture = mTextures[mMaterials[primitive.materialIndex].baseColorTextureIndex];
-				// Bind the descriptor for the current primitive's texture
-                if (!isShadowMapPass) {
+                if (mMaterials[primitive.materialIndex].baseColorTextureIndex >= 0 && !isShadowMapPass) {
+                    Texture texture = mTextures[mMaterials[primitive.materialIndex].baseColorTextureIndex];
+				    // Bind the descriptor for the current primitive's texture
                     vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 2, 1, &mImages[texture.imageIndex].descriptorSet[framesInFlightIndex], 0, nullptr);
                 }
 				vkCmdDrawIndexed(commandBuffer, primitive.indexCount, 1, primitive.firstIndex, 0, 0);
