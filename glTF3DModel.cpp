@@ -1,9 +1,9 @@
 #define TINYGLTF_IMPLEMENTATION
 #define STB_IMAGE_WRITE_IMPLEMENTATION
-#include "Avocado.hpp"
+#include "glTF3DModel.hpp"
 #include <iostream>
 
-Avocado::Avocado(VulkanInstance* vulkanInstance) : mVulkanInstance(vulkanInstance) {
+glTF3DModel::glTF3DModel(VulkanInstance* vulkanInstance) : mVulkanInstance(vulkanInstance), mInitialized(false) {
     mVertexGPUData.vertexBuffer = VK_NULL_HANDLE;
     mVertexGPUData.vertexBufferMemory = VK_NULL_HANDLE;
     mIndexGPUData.indexBuffer = VK_NULL_HANDLE;
@@ -15,7 +15,7 @@ Avocado::Avocado(VulkanInstance* vulkanInstance) : mVulkanInstance(vulkanInstanc
 
 }
 
-void Avocado::clearResource() {
+void glTF3DModel::clearResource() {
     vkDestroyBuffer(mVulkanInstance->getLogicalDevice(), mVertexGPUData.vertexBuffer, nullptr);
     vkFreeMemory(mVulkanInstance->getLogicalDevice(), mVertexGPUData.vertexBufferMemory, nullptr);
     vkDestroyBuffer(mVulkanInstance->getLogicalDevice(), mIndexGPUData.indexBuffer, nullptr);
@@ -30,19 +30,33 @@ void Avocado::clearResource() {
     vkDestroyDescriptorSetLayout(mVulkanInstance->getLogicalDevice(), mShadowMapDescriptorSetLayout, nullptr);
     vkDestroyDescriptorSetLayout(mVulkanInstance->getLogicalDevice(), mTextureDescriptorSetLayout, nullptr);
     vkDestroyDescriptorPool(mVulkanInstance->getLogicalDevice(), mDescriptorPool, nullptr);
+
+    mVertexBufferData.clear();
+    mIndexBufferData.clear();
+    mImages.clear();
+    mTextures.clear();
+    mMaterials.clear();
+    for (Node* node: mNodes) {
+        delete node;
+    }
+    mNodes.clear();
+    mUBODescriptorSet.clear();
+    mShadowMapDescriptorSet.clear();
+    mInitialized = false;
 }
 
-Avocado::~Avocado() {
+glTF3DModel::~glTF3DModel() {
     for (Node* node: mNodes) {
         delete node;
     }
 }
 
-void Avocado::initialize() {
-    loadglTFFile("external/glTF-Sample-Assets/Models/Avocado/glTF/Avocado.gltf");
+void glTF3DModel::initialize(const std::string& filePath) {
+    loadglTFFile(filePath);
+    mInitialized = true;
 }
 
-void Avocado::loadglTFFile(std::string filename)
+void glTF3DModel::loadglTFFile(std::string filename)
 {
 	tinygltf::Model glTFInput;
 	tinygltf::TinyGLTF gltfContext;
@@ -60,7 +74,7 @@ void Avocado::loadglTFFile(std::string filename)
     }
 }
 
-void Avocado::loadImages(tinygltf::Model* glTFInput) {
+void glTF3DModel::loadImages(tinygltf::Model* glTFInput) {
     mImages.resize(glTFInput->images.size());
     for (size_t i = 0; i <glTFInput->images.size(); ++i) {
         const tinygltf::Image& glTFImage = glTFInput->images[i];
@@ -91,7 +105,7 @@ void Avocado::loadImages(tinygltf::Model* glTFInput) {
     }
 }
 
-void Avocado::loadTextures(tinygltf::Model* glTFInput) {
+void glTF3DModel::loadTextures(tinygltf::Model* glTFInput) {
     mTextures.resize(glTFInput->textures.size());
     for (size_t i = 0; i < glTFInput->textures.size(); ++i) {
         const tinygltf::Texture& glTFTexture = glTFInput->textures[i];
@@ -101,7 +115,7 @@ void Avocado::loadTextures(tinygltf::Model* glTFInput) {
     }
 }
 
-void Avocado::loadMaterials(tinygltf::Model* glTFInput) {
+void glTF3DModel::loadMaterials(tinygltf::Model* glTFInput) {
     mMaterials.resize(glTFInput->materials.size());
     for (size_t i = 0; i < glTFInput->materials.size(); ++i) {
         const tinygltf::Material& glTFMaterial = glTFInput->materials[i];
@@ -120,7 +134,7 @@ void Avocado::loadMaterials(tinygltf::Model* glTFInput) {
     }
 }
 
-void Avocado::loadScenes(tinygltf::Model* glTFInput) {
+void glTF3DModel::loadScenes(tinygltf::Model* glTFInput) {
     const tinygltf::Scene& scene = glTFInput->scenes[0];
     for (size_t i = 0; i < scene.nodes.size(); ++i) {
         const tinygltf::Node node = glTFInput->nodes[scene.nodes[i]];
@@ -128,7 +142,7 @@ void Avocado::loadScenes(tinygltf::Model* glTFInput) {
     }
 }
 
-void Avocado::loadNode(const tinygltf::Node* gltfNode, const tinygltf::Model* glTFInput, Node* parent, std::vector<uint32_t>& indexBuffer, std::vector<Vertex>& vertexBuffer) {
+void glTF3DModel::loadNode(const tinygltf::Node* gltfNode, const tinygltf::Model* glTFInput, Node* parent, std::vector<uint32_t>& indexBuffer, std::vector<Vertex>& vertexBuffer) {
     Node* newNode = new Node();
     newNode->parent = parent;
     glm::mat4 translationMat(1.0f), rotationMat(1.0f), scaleMat(1.0f);
@@ -259,15 +273,15 @@ void Avocado::loadNode(const tinygltf::Node* gltfNode, const tinygltf::Model* gl
     }
 }
 
-VkVertexInputBindingDescription2EXT Avocado::getBindingDescription2EXT() {
+VkVertexInputBindingDescription2EXT glTF3DModel::getBindingDescription2EXT() {
     return Vertex::getBindingDescription2EXT();
 }
 
-std::array<VkVertexInputAttributeDescription2EXT, 3> Avocado::getAttributeDescriptions2EXT() {
+std::array<VkVertexInputAttributeDescription2EXT, 3> glTF3DModel::getAttributeDescriptions2EXT() {
     return Vertex::getAttributeDescriptions2EXT();
 }
 
-void Avocado::createVertexBuffer() {
+void glTF3DModel::createVertexBuffer() {
     VkDeviceSize vertexBufferSize = sizeof(mVertexBufferData[0]) * mVertexBufferData.size();
 
     VkBuffer stagingBuffer;
@@ -286,7 +300,7 @@ void Avocado::createVertexBuffer() {
     vkFreeMemory(mVulkanInstance->getLogicalDevice(), stagingBufferMemory, nullptr);
 }
 
-void Avocado::createIndexBuffer() {
+void glTF3DModel::createIndexBuffer() {
     VkDeviceSize indexBufferSize = sizeof(mIndexBufferData[0]) * mIndexBufferData.size();
 
     VkBuffer stagingBuffer;
@@ -305,7 +319,7 @@ void Avocado::createIndexBuffer() {
     vkFreeMemory(mVulkanInstance->getLogicalDevice(), stagingBufferMemory, nullptr);
 }
 
-void Avocado::setupDescriptors(const uint8_t framesInFlightCount,
+void glTF3DModel::setupDescriptors(const uint8_t framesInFlightCount,
                         const std::vector<VkBuffer>& uniformBuffers,
                         const VkDeviceSize uboSize,
                         const std::vector<VkImageView>& shadowMapImageViews,
@@ -456,7 +470,7 @@ void Avocado::setupDescriptors(const uint8_t framesInFlightCount,
     }
 }
 
-void Avocado:: updateShadowMapDescriptorSets(
+void glTF3DModel:: updateShadowMapDescriptorSets(
     const uint8_t framesInFlightCount,
     const std::vector<VkImageView>& shadowMapImageViews,
     const VkSampler& shadowMapSampler) {
@@ -479,21 +493,21 @@ void Avocado:: updateShadowMapDescriptorSets(
     }
 }
 
-const VkDescriptorSet* Avocado::getUBODescriptorSet(const uint8_t framesInFlightIndex) const {
+const VkDescriptorSet* glTF3DModel::getUBODescriptorSet(const uint8_t framesInFlightIndex) const {
     return &mUBODescriptorSet[framesInFlightIndex];
 }
 
-const VkDescriptorSet* Avocado::getShadowMapDescriptorSet(const uint8_t framesInFlightIndex) const {
+const VkDescriptorSet* glTF3DModel::getShadowMapDescriptorSet(const uint8_t framesInFlightIndex) const {
     return &mShadowMapDescriptorSet[framesInFlightIndex];
 }
 
-std::array<VkDescriptorSetLayout, 3> Avocado::getDescriptorSetLayouts()
+std::array<VkDescriptorSetLayout, 3> glTF3DModel::getDescriptorSetLayouts()
 {
     return {mUBODescriptorSetLayout, mShadowMapDescriptorSetLayout, mTextureDescriptorSetLayout};
 }
 
 // Draw a single node including child nodes (if present)
-void Avocado::drawNode(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, Node* node, const uint32_t framesInFlightIndex, bool isShadowMapPass)
+void glTF3DModel::drawNode(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, Node* node, const uint32_t framesInFlightIndex, bool isShadowMapPass)
 {
 	if (node->mesh.primitives.size() > 0) {
 		// Pass the node's matrix via push constants
@@ -524,7 +538,7 @@ void Avocado::drawNode(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineL
 }
 
 // Draw the glTF scene starting at the top-level-nodes
-void Avocado::draw(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, const uint32_t framesInFlightIndex, bool isShadowMapPass)
+void glTF3DModel::draw(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, const uint32_t framesInFlightIndex, bool isShadowMapPass)
 {
 	// All vertices and indices are stored in single buffers, so we only need to bind once
 	VkDeviceSize offsets[1] = { 0 };

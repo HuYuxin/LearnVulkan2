@@ -7,11 +7,12 @@
 #include "external/tinygltf/tiny_gltf.h"
 
 
-class Avocado {
+class glTF3DModel {
 public:
-    Avocado(VulkanInstance* vulkanInstance);
-    ~Avocado();
-    void initialize();
+    glTF3DModel(VulkanInstance* vulkanInstance);
+    ~glTF3DModel();
+    void initialize(const std::string& filePath);
+    bool isInitialized() const { return mInitialized; }
     VkVertexInputBindingDescription2EXT getBindingDescription2EXT();
     std::array<VkVertexInputAttributeDescription2EXT, 3> getAttributeDescriptions2EXT();
     void createVertexBuffer();
@@ -238,6 +239,7 @@ private:
     VkDescriptorSetLayout mTextureDescriptorSetLayout;
     std::vector<VkDescriptorSet> mUBODescriptorSet;
     std::vector<VkDescriptorSet> mShadowMapDescriptorSet;
+    bool mInitialized;
 
     void loadglTFFile(std::string filename);
     void loadImages(tinygltf::Model* glTFInput);
@@ -245,6 +247,6 @@ private:
     void loadMaterials(tinygltf::Model* glTFInput);
     void loadScenes(tinygltf::Model* glTFInput);
     void loadNode(const tinygltf::Node* node, const tinygltf::Model* glTFInput, Node* parentNode, std::vector<uint32_t>& indexBuffer, std::vector<Vertex>& vertexBuffer);
-    void drawNode(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, Avocado::Node* node, const uint32_t framesInFlightIndex, bool isShadowMapPass);
+    void drawNode(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, glTF3DModel::Node* node, const uint32_t framesInFlightIndex, bool isShadowMapPass);
 };
 #endif

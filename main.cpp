@@ -23,7 +23,7 @@
 #include <vector>
 #include <unordered_map>
 
-#include "Avocado.hpp"
+#include "glTF3DModel.hpp"
 #include "Camera.hpp"
 #include "Cube.hpp"
 #include "Floor.hpp"
@@ -414,7 +414,7 @@ private:
         lambertVertexShaderCreateInfo.pCode = lambertVertexShaderCode.data();
         lambertVertexShaderCreateInfo.codeSize = lambertVertexShaderCodeSize;
         lambertVertexShaderCreateInfo.pName = "main";
-        std::array<VkDescriptorSetLayout, 3> lambertSetLayouts = mAvocado->getDescriptorSetLayouts();
+        std::array<VkDescriptorSetLayout, 3> lambertSetLayouts = m3DModel->getDescriptorSetLayouts();
         lambertVertexShaderCreateInfo.setLayoutCount = lambertSetLayouts.size();
         lambertVertexShaderCreateInfo.pSetLayouts = lambertSetLayouts.data();
         lambertVertexShaderCreateInfo.pushConstantRangeCount = 1;
@@ -449,7 +449,7 @@ private:
     void createLambertGraphicsPipelineLayout(const VkDevice& logicalDevice) {
         VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
         pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-        std::array<VkDescriptorSetLayout, 3> lambertSetLayouts = mAvocado->getDescriptorSetLayouts();
+        std::array<VkDescriptorSetLayout, 3> lambertSetLayouts = m3DModel->getDescriptorSetLayouts();
         pipelineLayoutInfo.setLayoutCount = lambertSetLayouts.size();
         pipelineLayoutInfo.pSetLayouts = lambertSetLayouts.data();
         VkPushConstantRange pushConstantRange {};
@@ -465,18 +465,11 @@ private:
     }
 
     void loadObjects() {
-        mAvocado = new Avocado(&mVulkanInstance);
-    }
-
-    void initializeObjects() {
-        mAvocado->initialize();
-        mAvocado->createVertexBuffer();
-        mAvocado->createIndexBuffer();
-        mAvocado->setupDescriptors(MAX_FRAMES_IN_FLIGHT, mUniformsBuffers, sizeof(UniformBufferObject), mShadowMapImageViews, mShadowMapSampler);
+        m3DModel = new glTF3DModel(&mVulkanInstance);
     }
 
     void updateShadowMapDescriptorSets() {
-        mAvocado->updateShadowMapDescriptorSets(MAX_FRAMES_IN_FLIGHT, mShadowMapImageViews, mShadowMapSampler);
+        m3DModel->updateShadowMapDescriptorSets(MAX_FRAMES_IN_FLIGHT, mShadowMapImageViews, mShadowMapSampler);
     }
 
     struct UniformBufferObject {
@@ -699,13 +692,10 @@ private:
         createShadowMapSampler(mVulkanInstance.getPhysicalDevice(), mVulkanInstance.getLogicalDevice());
         createDescriptorPool(mVulkanInstance.getLogicalDevice());
         loadObjects();
-        initializeObjects();
         createShadowMapDescriptorSetLayout(mVulkanInstance.getLogicalDevice());
         createShadowMapDescriptorSets(mVulkanInstance.getLogicalDevice());
         createShadowMapShaderObjects(mVulkanInstance.getLogicalDevice());
         createShadowMapGraphicsPipelineLayout(mVulkanInstance.getLogicalDevice());
-        createLambertShaderObjects(mVulkanInstance.getLogicalDevice());
-        createLambertGraphicsPipelineLayout(mVulkanInstance.getLogicalDevice());
         createCommandBuffer(mVulkanInstance.getCommandPool(), mVulkanInstance.getLogicalDevice());
         createSyncObjects(mVulkanInstance.getLogicalDevice());
     }
@@ -791,30 +781,9 @@ private:
         }
 
         VkFormat depthFormat = findDepthFormat(physicalDevice);
-        transitionImageLayout(mVulkanInstance, commandBuffer, mShadowMapImages[imageIndex], depthFormat, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, 1);
-        VkRenderingInfo shadowMapRenderInfo{};
-        shadowMapRenderInfo.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
-        VkRect2D shadowMapRenderArea{};
-        shadowMapRenderArea.offset = {0, 0};
-        shadowMapRenderArea.extent = mSwapChainExtent;
-        shadowMapRenderInfo.renderArea = shadowMapRenderArea;
-        shadowMapRenderInfo.layerCount = 1;
-        shadowMapRenderInfo.colorAttachmentCount = 0;
-        VkRenderingAttachmentInfo shadowMapDepthAttachmentInfo{};
-        shadowMapDepthAttachmentInfo.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
-        shadowMapDepthAttachmentInfo.imageView = mShadowMapImageViews[imageIndex];
-        shadowMapDepthAttachmentInfo.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-        shadowMapDepthAttachmentInfo.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-        shadowMapDepthAttachmentInfo.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-        VkClearValue shadowMapClearValue{};
-        shadowMapClearValue.depthStencil = {1.0f, 0};
-        shadowMapDepthAttachmentInfo.clearValue = shadowMapClearValue;
-        shadowMapRenderInfo.pDepthAttachment = &shadowMapDepthAttachmentInfo;
-        vkCmdBeginRendering(commandBuffer, &shadowMapRenderInfo);
         VkRect2D scissor{};
         scissor.offset = {0, 0};
         scissor.extent = mSwapChainExtent;
-        vkCmdSetScissorWithCount(commandBuffer, 1, &scissor);
         VkViewport viewport{};
         viewport.x = 0.0f;
         viewport.y = 0.0f;
@@ -822,35 +791,59 @@ private:
         viewport.height = (float)mSwapChainExtent.height;
         viewport.minDepth = 0.0f;
         viewport.maxDepth = 1.0f;
-	    vkCmdSetViewportWithCountEXT(commandBuffer, 1, &viewport);
-	    vkCmdSetCullMode(commandBuffer, VK_CULL_MODE_BACK_BIT);
-		vkCmdSetFrontFace(commandBuffer, VK_FRONT_FACE_COUNTER_CLOCKWISE);
-		vkCmdSetDepthTestEnable(commandBuffer, VK_TRUE);
-		vkCmdSetDepthWriteEnable(commandBuffer, VK_TRUE);
-		vkCmdSetDepthCompareOp(commandBuffer, VK_COMPARE_OP_LESS);
-		vkCmdSetPrimitiveTopology(commandBuffer, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
-		vkCmdSetRasterizerDiscardEnable(commandBuffer, VK_FALSE);
-		vkCmdSetPolygonModeEXT(commandBuffer, VK_POLYGON_MODE_FILL);
-		vkCmdSetRasterizationSamplesEXT(commandBuffer, VK_SAMPLE_COUNT_1_BIT);
-		vkCmdSetAlphaToCoverageEnableEXT(commandBuffer, VK_FALSE);
-		vkCmdSetDepthBiasEnable(commandBuffer, VK_FALSE);
-		vkCmdSetStencilTestEnable(commandBuffer, VK_FALSE);
-		vkCmdSetPrimitiveRestartEnable(commandBuffer, VK_FALSE);
-		const uint32_t sampleMask = 0xFF;
-		vkCmdSetSampleMaskEXT(commandBuffer, VK_SAMPLE_COUNT_1_BIT, &sampleMask);
-		const VkBool32 colorBlendEnables = false;
-		const VkColorComponentFlags colorBlendComponentFlags = 0xf;
-		vkCmdSetColorBlendEnableEXT(commandBuffer, 0, 1, &colorBlendEnables);
-		vkCmdSetColorWriteMaskEXT(commandBuffer, 0, 1, &colorBlendComponentFlags);
-        VkVertexInputBindingDescription2EXT vertexInputBinding = mAvocado->getBindingDescription2EXT();
-		std::array<VkVertexInputAttributeDescription2EXT, 3> vertexAttributes = mAvocado->getAttributeDescriptions2EXT();
-        vkCmdSetVertexInputEXT(commandBuffer, 1, &vertexInputBinding, 3, vertexAttributes.data());
-        vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mShadowMapPipelineLayout, 0, 1, &mShadowMapDescriptorSets[currentFrameIndex], 0, nullptr);
+        const uint32_t sampleMask = 0xFF;
+        const VkBool32 colorBlendEnables = false;
+        const VkColorComponentFlags colorBlendComponentFlags = 0xf;
         std::array<VkShaderStageFlagBits, 2> shaderStageBits = {VK_SHADER_STAGE_VERTEX_BIT, VK_SHADER_STAGE_FRAGMENT_BIT};
-        vkCmdBindShadersEXT(commandBuffer, 2, &shaderStageBits[0], &mShadowMapShaderObjects[0]);
-        mAvocado->draw(commandBuffer, mShadowMapPipelineLayout, currentFrameIndex, true);
-        vkCmdEndRendering(commandBuffer);
-        transitionImageLayout(mVulkanInstance, commandBuffer, mShadowMapImages[imageIndex], depthFormat, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 1);
+
+        if (m3DModel->isInitialized()) {
+            transitionImageLayout(mVulkanInstance, commandBuffer, mShadowMapImages[imageIndex], depthFormat, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, 1);
+            VkRenderingInfo shadowMapRenderInfo{};
+            shadowMapRenderInfo.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
+            VkRect2D shadowMapRenderArea{};
+            shadowMapRenderArea.offset = {0, 0};
+            shadowMapRenderArea.extent = mSwapChainExtent;
+            shadowMapRenderInfo.renderArea = shadowMapRenderArea;
+            shadowMapRenderInfo.layerCount = 1;
+            shadowMapRenderInfo.colorAttachmentCount = 0;
+            VkRenderingAttachmentInfo shadowMapDepthAttachmentInfo{};
+            shadowMapDepthAttachmentInfo.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+            shadowMapDepthAttachmentInfo.imageView = mShadowMapImageViews[imageIndex];
+            shadowMapDepthAttachmentInfo.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+            shadowMapDepthAttachmentInfo.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+            shadowMapDepthAttachmentInfo.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+            VkClearValue shadowMapClearValue{};
+            shadowMapClearValue.depthStencil = {1.0f, 0};
+            shadowMapDepthAttachmentInfo.clearValue = shadowMapClearValue;
+            shadowMapRenderInfo.pDepthAttachment = &shadowMapDepthAttachmentInfo;
+            vkCmdBeginRendering(commandBuffer, &shadowMapRenderInfo);
+            vkCmdSetScissorWithCount(commandBuffer, 1, &scissor);
+	        vkCmdSetViewportWithCountEXT(commandBuffer, 1, &viewport);
+	        vkCmdSetCullMode(commandBuffer, VK_CULL_MODE_BACK_BIT);
+		    vkCmdSetFrontFace(commandBuffer, VK_FRONT_FACE_COUNTER_CLOCKWISE);
+		    vkCmdSetDepthTestEnable(commandBuffer, VK_TRUE);
+		    vkCmdSetDepthWriteEnable(commandBuffer, VK_TRUE);
+		    vkCmdSetDepthCompareOp(commandBuffer, VK_COMPARE_OP_LESS);
+		    vkCmdSetPrimitiveTopology(commandBuffer, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+		    vkCmdSetRasterizerDiscardEnable(commandBuffer, VK_FALSE);
+		    vkCmdSetPolygonModeEXT(commandBuffer, VK_POLYGON_MODE_FILL);
+		    vkCmdSetRasterizationSamplesEXT(commandBuffer, VK_SAMPLE_COUNT_1_BIT);
+		    vkCmdSetAlphaToCoverageEnableEXT(commandBuffer, VK_FALSE);
+		    vkCmdSetDepthBiasEnable(commandBuffer, VK_FALSE);
+		    vkCmdSetStencilTestEnable(commandBuffer, VK_FALSE);
+		    vkCmdSetPrimitiveRestartEnable(commandBuffer, VK_FALSE);
+		    vkCmdSetSampleMaskEXT(commandBuffer, VK_SAMPLE_COUNT_1_BIT, &sampleMask);
+		    vkCmdSetColorBlendEnableEXT(commandBuffer, 0, 1, &colorBlendEnables);
+		    vkCmdSetColorWriteMaskEXT(commandBuffer, 0, 1, &colorBlendComponentFlags);
+            VkVertexInputBindingDescription2EXT vertexInputBinding = m3DModel->getBindingDescription2EXT();
+		    std::array<VkVertexInputAttributeDescription2EXT, 3> vertexAttributes = m3DModel->getAttributeDescriptions2EXT();
+            vkCmdSetVertexInputEXT(commandBuffer, 1, &vertexInputBinding, 3, vertexAttributes.data());
+            vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mShadowMapPipelineLayout, 0, 1, &mShadowMapDescriptorSets[currentFrameIndex], 0, nullptr);
+            vkCmdBindShadersEXT(commandBuffer, 2, &shaderStageBits[0], &mShadowMapShaderObjects[0]);
+            m3DModel->draw(commandBuffer, mShadowMapPipelineLayout, currentFrameIndex, true);
+            vkCmdEndRendering(commandBuffer);
+            transitionImageLayout(mVulkanInstance, commandBuffer, mShadowMapImages[imageIndex], depthFormat, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 1);
+        }
 
         transitionImageLayout(mVulkanInstance, commandBuffer, mSwapChainImages[imageIndex], mSwapChainImageFormat, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 1);
         VkRenderingInfo lambertRenderInfo{};
@@ -885,30 +878,33 @@ private:
         lambertRenderInfo.pColorAttachments = &colorAttachmentInfo;
         lambertRenderInfo.pDepthAttachment = &depthAttachmentInfo;
         vkCmdBeginRendering(commandBuffer, &lambertRenderInfo);
-        vkCmdSetScissorWithCount(commandBuffer, 1, &scissor);
-	    vkCmdSetViewportWithCountEXT(commandBuffer, 1, &viewport);
-	    vkCmdSetCullMode(commandBuffer, VK_CULL_MODE_BACK_BIT);
-		vkCmdSetFrontFace(commandBuffer, VK_FRONT_FACE_COUNTER_CLOCKWISE);
-		vkCmdSetDepthTestEnable(commandBuffer, VK_TRUE);
-		vkCmdSetDepthWriteEnable(commandBuffer, VK_TRUE);
-		vkCmdSetDepthCompareOp(commandBuffer, VK_COMPARE_OP_LESS);
-		vkCmdSetPrimitiveTopology(commandBuffer, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
-		vkCmdSetRasterizerDiscardEnable(commandBuffer, VK_FALSE);
-		vkCmdSetPolygonModeEXT(commandBuffer, VK_POLYGON_MODE_FILL);
-		vkCmdSetRasterizationSamplesEXT(commandBuffer, mVulkanInstance.getMsaaSamples());
-		vkCmdSetAlphaToCoverageEnableEXT(commandBuffer, VK_FALSE);
-		vkCmdSetDepthBiasEnable(commandBuffer, VK_FALSE);
-		vkCmdSetStencilTestEnable(commandBuffer, VK_FALSE);
-		vkCmdSetPrimitiveRestartEnable(commandBuffer, VK_FALSE);
-		vkCmdSetSampleMaskEXT(commandBuffer, mVulkanInstance.getMsaaSamples(), &sampleMask);
-		vkCmdSetColorBlendEnableEXT(commandBuffer, 0, 1, &colorBlendEnables);
-		vkCmdSetColorWriteMaskEXT(commandBuffer, 0, 1, &colorBlendComponentFlags);
-		vkCmdSetVertexInputEXT(commandBuffer, 1, &vertexInputBinding, 3, vertexAttributes.data());
-        vkCmdBindShadersEXT(commandBuffer, 2, &shaderStageBits[0], &mLambertShaderObjects[0]);
-        vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mLambertPipelineLayout, 0, 1, mAvocado->getUBODescriptorSet(currentFrameIndex), 0, nullptr);
-        vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mLambertPipelineLayout, 1, 1, mAvocado->getShadowMapDescriptorSet(currentFrameIndex), 0, nullptr);
-        mAvocado->draw(commandBuffer, mLambertPipelineLayout, currentFrameIndex, false);
-
+        if (m3DModel->isInitialized()) {
+            vkCmdSetScissorWithCount(commandBuffer, 1, &scissor);
+	        vkCmdSetViewportWithCountEXT(commandBuffer, 1, &viewport);
+	        vkCmdSetCullMode(commandBuffer, VK_CULL_MODE_BACK_BIT);
+		    vkCmdSetFrontFace(commandBuffer, VK_FRONT_FACE_COUNTER_CLOCKWISE);
+		    vkCmdSetDepthTestEnable(commandBuffer, VK_TRUE);
+		    vkCmdSetDepthWriteEnable(commandBuffer, VK_TRUE);
+		    vkCmdSetDepthCompareOp(commandBuffer, VK_COMPARE_OP_LESS);
+		    vkCmdSetPrimitiveTopology(commandBuffer, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+		    vkCmdSetRasterizerDiscardEnable(commandBuffer, VK_FALSE);
+		    vkCmdSetPolygonModeEXT(commandBuffer, VK_POLYGON_MODE_FILL);
+		    vkCmdSetRasterizationSamplesEXT(commandBuffer, mVulkanInstance.getMsaaSamples());
+		    vkCmdSetAlphaToCoverageEnableEXT(commandBuffer, VK_FALSE);
+		    vkCmdSetDepthBiasEnable(commandBuffer, VK_FALSE);
+		    vkCmdSetStencilTestEnable(commandBuffer, VK_FALSE);
+		    vkCmdSetPrimitiveRestartEnable(commandBuffer, VK_FALSE);
+		    vkCmdSetSampleMaskEXT(commandBuffer, mVulkanInstance.getMsaaSamples(), &sampleMask);
+		    vkCmdSetColorBlendEnableEXT(commandBuffer, 0, 1, &colorBlendEnables);
+		    vkCmdSetColorWriteMaskEXT(commandBuffer, 0, 1, &colorBlendComponentFlags);
+            VkVertexInputBindingDescription2EXT vertexInputBinding = m3DModel->getBindingDescription2EXT();
+		    std::array<VkVertexInputAttributeDescription2EXT, 3> vertexAttributes = m3DModel->getAttributeDescriptions2EXT();
+		    vkCmdSetVertexInputEXT(commandBuffer, 1, &vertexInputBinding, 3, vertexAttributes.data());
+            vkCmdBindShadersEXT(commandBuffer, 2, &shaderStageBits[0], &mLambertShaderObjects[0]);
+            vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mLambertPipelineLayout, 0, 1, m3DModel->getUBODescriptorSet(currentFrameIndex), 0, nullptr);
+            vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mLambertPipelineLayout, 1, 1, m3DModel->getShadowMapDescriptorSet(currentFrameIndex), 0, nullptr);
+            m3DModel->draw(commandBuffer, mLambertPipelineLayout, currentFrameIndex, false);
+        }
         vkCmdEndRendering(commandBuffer);
 
         // ImGui render pass: targets the already-resolved 1-sample swapchain image.
@@ -966,14 +962,47 @@ private:
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
         // Add your UI elements HERE:
-        ImGui::SetNextWindowSize(ImVec2(500, 200), ImGuiCond_Once);
+        ImGui::SetNextWindowSize(ImVec2(500, 250), ImGuiCond_Once);
         ImGui::Begin("My Window");
+        ImGui::InputText("Model Path", mModelPathBuf, sizeof(mModelPathBuf));
+        if (ImGui::Button("Load Model")) {
+            mSelectedModelPath = std::string(mModelPathBuf);
+        }
+        ImGui::Separator();
         ImGui::InputFloat("Light Position X", &mLightPosX, 0.1f, 1.0f, "%.1f");
         ImGui::InputFloat("Light Position Y", &mLightPosY, 0.1f, 1.0f, "%.1f");
         ImGui::InputFloat("Light Position Z", &mLightPosZ, 0.1f, 1.0f, "%.1f");
         ImGui::SliderFloat("Camera Yaw (Y-axis)", &mCameraYaw, -180.0f, 180.0f, "%.1f deg");
         ImGui::SliderFloat("Camera Pitch (X-axis)", &mCameraPitch, -89.0f, 89.0f, "%.1f deg");
         ImGui::End();
+
+        // Hot-swap 3D model if user selected a new path
+        if (!mSelectedModelPath.empty() && mSelectedModelPath != mCurrentModelPath) {
+            vkDeviceWaitIdle(logicalDevice);
+
+            // Destroy Lambert shader objects & pipeline layout (they reference m3DModel's descriptor set layouts)
+            if (m3DModel->isInitialized()) {
+                for (VkShaderEXT& shader : mLambertShaderObjects) {
+                    vkDestroyShaderEXT(logicalDevice, shader, nullptr);
+                }
+                vkDestroyPipelineLayout(logicalDevice, mLambertPipelineLayout, nullptr);
+                m3DModel->clearResource();
+            }
+
+            // Load new model (full init sequence)
+            m3DModel->initialize(mSelectedModelPath);
+            m3DModel->createVertexBuffer();
+            m3DModel->createIndexBuffer();
+            m3DModel->setupDescriptors(MAX_FRAMES_IN_FLIGHT, mUniformsBuffers,
+                                       sizeof(UniformBufferObject),
+                                       mShadowMapImageViews, mShadowMapSampler);
+
+            // Recreate Lambert pipeline objects with new descriptor layouts
+            createLambertShaderObjects(logicalDevice);
+            createLambertGraphicsPipelineLayout(logicalDevice);
+
+            mCurrentModelPath = mSelectedModelPath;
+        }
 
         processInput();
 
@@ -1117,12 +1146,18 @@ private:
         cleanupSwapChain(logicalDevice);
         cleanupShadowMap(logicalDevice);
         vkDestroySampler(logicalDevice, mShadowMapSampler, nullptr);
-        mAvocado->clearResource();
+        if (m3DModel->isInitialized()) {
+            m3DModel->clearResource();
+        }
+        delete m3DModel;
         for (VkShaderEXT& shadowMapShaderObject : mShadowMapShaderObjects) {
             vkDestroyShaderEXT(logicalDevice, shadowMapShaderObject, nullptr);
         }
-        for (VkShaderEXT& lambertShaderObject : mLambertShaderObjects) {
-            vkDestroyShaderEXT(logicalDevice, lambertShaderObject, nullptr);
+        if (!mCurrentModelPath.empty()) {
+            for (VkShaderEXT& lambertShaderObject : mLambertShaderObjects) {
+                vkDestroyShaderEXT(logicalDevice, lambertShaderObject, nullptr);
+            }
+            vkDestroyPipelineLayout(logicalDevice, mLambertPipelineLayout, nullptr);
         }
 
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
@@ -1135,8 +1170,6 @@ private:
         vkDestroyDescriptorPool(logicalDevice, mDescriptorPool, nullptr);
         vkDestroyDescriptorSetLayout(logicalDevice, mShadowMapDescriptorSetLayout, nullptr);
         vkDestroyPipelineLayout(logicalDevice, mShadowMapPipelineLayout, nullptr);
-        //vkDestroyDescriptorSetLayout(logicalDevice, mLambertDescriptorSetLayout, nullptr);
-        vkDestroyPipelineLayout(logicalDevice, mLambertPipelineLayout, nullptr);
         for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
         {
             vkDestroySemaphore(logicalDevice, mImageAvailableSemaphores[i], nullptr);
@@ -1173,7 +1206,7 @@ private:
     std::vector<VkFence> mInFlightFences;
     uint32_t mCurrentFrame = 0;
     bool framebufferResized = false;
-    Avocado* mAvocado;
+    glTF3DModel* m3DModel;
     //std::vector<Object*> objects;
     VkImage mDepthImage;
     VkDeviceMemory mDepthImageMemory;
@@ -1197,6 +1230,9 @@ private:
     float mLightPosX = 5.0f;
     float mLightPosY = 5.0f;
     float mLightPosZ = 10.0f;
+    char mModelPathBuf[512] = "";
+    std::string mSelectedModelPath;
+    std::string mCurrentModelPath;
 };
 
 int main()
