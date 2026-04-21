@@ -111,3 +111,20 @@ void Camera::orbitAroundObjectHorizontalAxis(const float angle, float x, float y
     mForward = rotationMatrix * mForward;
     mForward = glm::normalize(mForward);
 }
+
+Frustum Camera::getFrustum() const {
+    Frustum frustum = {};
+    float tanHalfFov = tan(mFovY / 2.0f);
+    float farHalfHeight = mFar * tanHalfFov;
+    float farHalfWidth = farHalfHeight * mAspect;
+    glm::vec3 frontFar = mFar * mForward;
+    glm::vec3 cameraRight = glm::normalize(glm::cross(mUp, mForward));
+
+    frustum.mNearPlane = {mForward, mPosition + mForward * mNear};
+    frustum.mFarPlane = {-mForward, mPosition + mForward * mFar};
+    frustum.mLeftPlane = {glm::cross(mUp, (frontFar - cameraRight * farHalfWidth)), mPosition};
+    frustum.mRightPlane = {glm::cross((frontFar + cameraRight * farHalfWidth), mUp),  mPosition};
+    frustum.mTopPlane = {glm::cross(cameraRight, (frontFar + mUp * farHalfHeight)), mPosition};
+    frustum.mBottomPlane = {glm::cross((frontFar - mUp * farHalfHeight), cameraRight), mPosition};
+    return frustum;
+}

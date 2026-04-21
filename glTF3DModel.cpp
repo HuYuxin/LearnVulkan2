@@ -1,9 +1,11 @@
 #define TINYGLTF_IMPLEMENTATION
+#define STB_IMAGE_IMPLEMENTATION
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "glTF3DModel.hpp"
+#include "BoundingBox.hpp"
 #include <iostream>
 
-glTF3DModel::glTF3DModel(VulkanInstance* vulkanInstance) : mVulkanInstance(vulkanInstance), mInitialized(false) {
+glTF3DModel::glTF3DModel(VulkanInstance* vulkanInstance) : mVulkanInstance(vulkanInstance), mInitialized(false), mPrimitiveCount(0) {
     mVertexGPUData.vertexBuffer = VK_NULL_HANDLE;
     mVertexGPUData.vertexBufferMemory = VK_NULL_HANDLE;
     mIndexGPUData.indexBuffer = VK_NULL_HANDLE;
@@ -189,6 +191,9 @@ void glTF3DModel::loadNode(const tinygltf::Node* gltfNode, const tinygltf::Model
 
             size_t vertexCount = 0;
 
+            glm::vec3 aabbMin = glm::vec3(0.0f);
+            glm::vec3 aabbMax = glm::vec3(0.0f);
+
             if (primitive.attributes.find("POSITION") != primitive.attributes.end()) {
                 const tinygltf::Accessor& positionAccessor = glTFInput->accessors[primitive.attributes.at("POSITION")];
                 const tinygltf::BufferView& positionBufferView = glTFInput->bufferViews[positionAccessor.bufferView];
@@ -196,6 +201,12 @@ void glTF3DModel::loadNode(const tinygltf::Node* gltfNode, const tinygltf::Model
                     
                 positionBuffer = reinterpret_cast<const float*>(positionBufferData.data.data() + positionAccessor.byteOffset + positionBufferView.byteOffset);
                 vertexCount = positionAccessor.count;
+                if (positionAccessor.minValues.size() == 3) {
+                    aabbMin = glm::vec3(positionAccessor.minValues[0], positionAccessor.minValues[1], positionAccessor.minValues[2]);
+                }
+                if (positionAccessor.maxValues.size() == 3) {
+                    aabbMax = glm::vec3(positionAccessor.maxValues[0], positionAccessor.maxValues[1], positionAccessor.maxValues[2]);
+                }
             }
 
             if (primitive.attributes.find("NORMAL") != primitive.attributes.end()) {
@@ -262,8 +273,10 @@ void glTF3DModel::loadNode(const tinygltf::Node* gltfNode, const tinygltf::Model
             newPrimitive.firstIndex = firstIndex;
             newPrimitive.indexCount = indexCount;
             newPrimitive.materialIndex = primitive.material;
+            newPrimitive.aabbMin = aabbMin;
+            newPrimitive.aabbMax = aabbMax;
             newNode->mesh.primitives.push_back(newPrimitive);
-        }
+        } // End of per primitive
     }
 
     if (parent == nullptr) {
@@ -507,7 +520,7 @@ std::array<VkDescriptorSetLayout, 3> glTF3DModel::getDescriptorSetLayouts()
 }
 
 // Draw a single node including child nodes (if present)
-void glTF3DModel::drawNode(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, Node* node, const uint32_t framesInFlightIndex, bool isShadowMapPass)
+void glTF3DModel::drawNode(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, Node* node, const uint32_t framesInFlightIndex, const Frustum* frustum, bool isShadowMapPass)
 {
 	if (node->mesh.primitives.size() > 0) {
 		// Pass the node's matrix via push constants
@@ -518,34 +531,49 @@ void glTF3DModel::drawNode(VkCommandBuffer commandBuffer, VkPipelineLayout pipel
 			nodeMatrix = currentParent->localTransform * nodeMatrix;
 			currentParent = currentParent->parent;
 		}
-		// Pass the final matrix to the vertex shader using push constants
-		vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4), &nodeMatrix);
-		for (Primitive& primitive : node->mesh.primitives) {
-			if (primitive.indexCount > 0) {
-				// Get the texture index for this primitive
+
+        // Pass the final matrix to the vertex shader using push constants
+        vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4), &nodeMatrix);
+        for (Primitive& primitive : node->mesh.primitives) {
+            bool isFrustumCulled = false;
+            // Frustum culling test against AABB bounding box
+            if (frustum != nullptr) {
+                glm::vec3 boundingBoxCenter = (primitive.aabbMin + primitive.aabbMax) * 0.5f;
+                glm::vec3 boundingBoxExtent = {primitive.aabbMax.x - boundingBoxCenter.x, primitive.aabbMax.y - boundingBoxCenter.y, primitive.aabbMax.z - boundingBoxCenter.z};
+                BoundingBox bound(boundingBoxCenter, boundingBoxExtent);
+
+                if (!bound.isOnFrustum(*frustum, nodeMatrix)) {
+                    isFrustumCulled = true;
+                } 
+            }
+
+            if (primitive.indexCount > 0 && !isFrustumCulled) {
+                // Get the texture index for this primitive
                 if (mMaterials[primitive.materialIndex].baseColorTextureIndex >= 0 && !isShadowMapPass) {
                     Texture texture = mTextures[mMaterials[primitive.materialIndex].baseColorTextureIndex];
-				    // Bind the descriptor for the current primitive's texture
+                    // Bind the descriptor for the current primitive's texture
                     vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 2, 1, &mImages[texture.imageIndex].descriptorSet[framesInFlightIndex], 0, nullptr);
                 }
-				vkCmdDrawIndexed(commandBuffer, primitive.indexCount, 1, primitive.firstIndex, 0, 0);
-			}
-		}
+                vkCmdDrawIndexed(commandBuffer, primitive.indexCount, 1, primitive.firstIndex, 0, 0);
+                ++mPrimitiveCount;
+            }
+        }
 	}
 	for (auto& child : node->children) {
-		drawNode(commandBuffer, pipelineLayout, child, framesInFlightIndex, isShadowMapPass);
+		drawNode(commandBuffer, pipelineLayout, child, framesInFlightIndex, frustum, isShadowMapPass);
 	}
 }
 
 // Draw the glTF scene starting at the top-level-nodes
-void glTF3DModel::draw(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, const uint32_t framesInFlightIndex, bool isShadowMapPass)
+void glTF3DModel::draw(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, const uint32_t framesInFlightIndex, const Frustum* frustum, bool isShadowMapPass)
 {
+    mPrimitiveCount = 0;
 	// All vertices and indices are stored in single buffers, so we only need to bind once
 	VkDeviceSize offsets[1] = { 0 };
 	vkCmdBindVertexBuffers(commandBuffer, 0, 1, &mVertexGPUData.vertexBuffer, offsets);
 	vkCmdBindIndexBuffer(commandBuffer, mIndexGPUData.indexBuffer, 0, VK_INDEX_TYPE_UINT32);
 	// Render all nodes at top-level
 	for (auto& node : mNodes) {
-		drawNode(commandBuffer, pipelineLayout, node, framesInFlightIndex, isShadowMapPass);
+		drawNode(commandBuffer, pipelineLayout, node, framesInFlightIndex, frustum, isShadowMapPass);
 	}
 }

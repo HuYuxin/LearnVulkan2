@@ -795,6 +795,7 @@ private:
         const VkBool32 colorBlendEnables = false;
         const VkColorComponentFlags colorBlendComponentFlags = 0xf;
         std::array<VkShaderStageFlagBits, 2> shaderStageBits = {VK_SHADER_STAGE_VERTEX_BIT, VK_SHADER_STAGE_FRAGMENT_BIT};
+        const Frustum cameraFrustum = mCamera->getFrustum();
 
         if (m3DModel->isInitialized()) {
             transitionImageLayout(mVulkanInstance, commandBuffer, mShadowMapImages[imageIndex], depthFormat, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, 1);
@@ -840,7 +841,7 @@ private:
             vkCmdSetVertexInputEXT(commandBuffer, 1, &vertexInputBinding, 3, vertexAttributes.data());
             vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mShadowMapPipelineLayout, 0, 1, &mShadowMapDescriptorSets[currentFrameIndex], 0, nullptr);
             vkCmdBindShadersEXT(commandBuffer, 2, &shaderStageBits[0], &mShadowMapShaderObjects[0]);
-            m3DModel->draw(commandBuffer, mShadowMapPipelineLayout, currentFrameIndex, true);
+            m3DModel->draw(commandBuffer, mShadowMapPipelineLayout, currentFrameIndex, nullptr, true);
             vkCmdEndRendering(commandBuffer);
             transitionImageLayout(mVulkanInstance, commandBuffer, mShadowMapImages[imageIndex], depthFormat, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 1);
         }
@@ -903,7 +904,7 @@ private:
             vkCmdBindShadersEXT(commandBuffer, 2, &shaderStageBits[0], &mLambertShaderObjects[0]);
             vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mLambertPipelineLayout, 0, 1, m3DModel->getUBODescriptorSet(currentFrameIndex), 0, nullptr);
             vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mLambertPipelineLayout, 1, 1, m3DModel->getShadowMapDescriptorSet(currentFrameIndex), 0, nullptr);
-            m3DModel->draw(commandBuffer, mLambertPipelineLayout, currentFrameIndex, false);
+            m3DModel->draw(commandBuffer, mLambertPipelineLayout, currentFrameIndex, &cameraFrustum, false);
         }
         vkCmdEndRendering(commandBuffer);
 
@@ -977,6 +978,7 @@ private:
         ImGui::SetNextWindowSize(ImVec2(500, 300), ImGuiCond_Once);
         ImGui::Begin("My Window");
         ImGui::Text("FPS: %.1f  (%.3f ms/frame)", mDisplayFps, (mDisplayFps > 0.0f) ? 1000.0f / mDisplayFps : 0.0f);
+        ImGui::Text("Primitive Count: %d", m3DModel->getPrimitiveCount());
         ImGui::Separator();
         ImGui::InputText("Model Path", mModelPathBuf, sizeof(mModelPathBuf));
         if (ImGui::Button("Load Model")) {

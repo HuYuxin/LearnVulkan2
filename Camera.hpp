@@ -1,6 +1,7 @@
 #ifndef CAMERA_HPP
 #define CAMERA_HPP
 #include <glm/glm.hpp>
+#include "Frustum.hpp"
 
 enum class CameraMovement {
     FORWARD,
@@ -21,6 +22,7 @@ public:
     float getAspect() const;
     float getNear() const;
     float getFar() const;
+    Frustum getFrustum() const;
     void translate(const CameraMovement movement, const float movementSpeed);
     void orbitAroundObjectUpAxis(const float angle, const float x, const float z);
     void orbitAroundObjectHorizontalAxis(const float angle, const float x, const float y, const float z);

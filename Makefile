@@ -8,7 +8,7 @@ LDFLAGS = -lglfw -ldl -lpthread -lX11 -lXxf86vm -lXrandr -lXi
 DEBUG_FLAGS = -g -O0
 CFLAGS += $(DEBUG_FLAGS)
 
-SRCS = main.cpp Cube.cpp Floor.cpp VulkanInstance.cpp Camera.cpp utility.cpp Object.cpp glTF3DModel.cpp\
+SRCS = main.cpp BoundingBox.cpp Frustum.cpp VulkanInstance.cpp Camera.cpp utility.cpp Object.cpp glTF3DModel.cpp\
 		external/volk/volk.c \
 		external/imgui/imgui_demo.cpp external/imgui/imgui_draw.cpp external/imgui/imgui_tables.cpp external/imgui/imgui_widgets.cpp external/imgui/imgui.cpp \
 		external/imgui/backends/imgui_impl_vulkan.cpp \

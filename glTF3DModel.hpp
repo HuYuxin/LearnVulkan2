@@ -1,11 +1,11 @@
-#ifndef AVOCADO_HPP
-#define AVOCADO_HPP
+#ifndef GLTF3DMODEL_HPP
+#define GLTF3DMODEL_HPP
+#include "Frustum.hpp"
 #include "VulkanInstance.hpp"
 #include "utility.hpp"
 #include <glm/glm.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include "external/tinygltf/tiny_gltf.h"
-
 
 class glTF3DModel {
 public:
@@ -33,8 +33,9 @@ public:
     
     void clearResource();
 
+    int getPrimitiveCount() const { return mPrimitiveCount; }
     
-    void draw(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, const uint32_t framesInFlightIndex, bool isShadowMapPass);
+    void draw(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, const uint32_t framesInFlightIndex, const Frustum* frustum, bool isShadowMapPass);
 
 private:
     struct Vertex
@@ -94,6 +95,8 @@ private:
         uint32_t firstIndex;
         uint32_t indexCount;
         int32_t materialIndex;
+        glm::vec3 aabbMin;
+        glm::vec3 aabbMax;
     };
 
     struct Mesh {
@@ -240,6 +243,7 @@ private:
     std::vector<VkDescriptorSet> mUBODescriptorSet;
     std::vector<VkDescriptorSet> mShadowMapDescriptorSet;
     bool mInitialized;
+    int mPrimitiveCount;
 
     void loadglTFFile(std::string filename);
     void loadImages(tinygltf::Model* glTFInput);
@@ -247,6 +251,6 @@ private:
     void loadMaterials(tinygltf::Model* glTFInput);
     void loadScenes(tinygltf::Model* glTFInput);
     void loadNode(const tinygltf::Node* node, const tinygltf::Model* glTFInput, Node* parentNode, std::vector<uint32_t>& indexBuffer, std::vector<Vertex>& vertexBuffer);
-    void drawNode(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, glTF3DModel::Node* node, const uint32_t framesInFlightIndex, bool isShadowMapPass);
+    void drawNode(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, glTF3DModel::Node* node, const uint32_t framesInFlightIndex, const Frustum* frustum, bool isShadowMapPass);
 };
 #endif
