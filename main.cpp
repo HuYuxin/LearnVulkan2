@@ -961,9 +961,23 @@ private:
         ImGui_ImplVulkan_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
+        // --- FPS calculation ---
+        auto now = std::chrono::steady_clock::now();
+        float deltaTime = std::chrono::duration<float>(now - mLastFrameTime).count();
+        mLastFrameTime = now;
+        mFrameCount++;
+        mFpsAccumulator += deltaTime;
+        if (mFpsAccumulator >= 0.5f) {
+            mDisplayFps = mFrameCount / mFpsAccumulator;
+            mFrameCount = 0;
+            mFpsAccumulator = 0.0f;
+        }
+
         // Add your UI elements HERE:
-        ImGui::SetNextWindowSize(ImVec2(500, 250), ImGuiCond_Once);
+        ImGui::SetNextWindowSize(ImVec2(500, 300), ImGuiCond_Once);
         ImGui::Begin("My Window");
+        ImGui::Text("FPS: %.1f  (%.3f ms/frame)", mDisplayFps, (mDisplayFps > 0.0f) ? 1000.0f / mDisplayFps : 0.0f);
+        ImGui::Separator();
         ImGui::InputText("Model Path", mModelPathBuf, sizeof(mModelPathBuf));
         if (ImGui::Button("Load Model")) {
             mSelectedModelPath = std::string(mModelPathBuf);
@@ -1233,6 +1247,12 @@ private:
     char mModelPathBuf[512] = "";
     std::string mSelectedModelPath;
     std::string mCurrentModelPath;
+
+    // FPS tracking
+    std::chrono::steady_clock::time_point mLastFrameTime = std::chrono::steady_clock::now();
+    int   mFrameCount    = 0;
+    float mFpsAccumulator = 0.0f;
+    float mDisplayFps     = 0.0f;
 };
 
 int main()
