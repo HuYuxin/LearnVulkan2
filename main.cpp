@@ -27,6 +27,7 @@
 #include "Camera.hpp"
 #include "Cube.hpp"
 #include "Floor.hpp"
+#include "Lights.hpp"
 #include "utility.hpp"
 #include "Vertex.hpp"
 #include "VulkanInstance.hpp"
@@ -330,6 +331,23 @@ private:
         }
     }
 
+    void createDirectionalLightDescriptorSetLayout(const VkDevice& logicalDevice) {
+        VkDescriptorSetLayoutBinding directionalLightUboLayoutBinding{};
+        directionalLightUboLayoutBinding.binding = 0;
+        directionalLightUboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        directionalLightUboLayoutBinding.descriptorCount = 1;
+        directionalLightUboLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+        directionalLightUboLayoutBinding.pImmutableSamplers = nullptr;
+        std::array<VkDescriptorSetLayoutBinding, 1> directionalLightBindings = {directionalLightUboLayoutBinding};
+        VkDescriptorSetLayoutCreateInfo layoutInfo{};
+        layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+        layoutInfo.bindingCount = static_cast<uint32_t> (directionalLightBindings.size());
+        layoutInfo.pBindings = directionalLightBindings.data();
+        if(vkCreateDescriptorSetLayout(logicalDevice, &layoutInfo, nullptr, &mDirectionalLightDescriptorSetLayout) != VK_SUCCESS) {
+            throw std::runtime_error("failed to create directional light descriptor set layout!");
+        }
+    }
+
     void createShadowMapGraphicsPipelineLayout(const VkDevice& logicalDevice) {
         VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
         pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
@@ -414,7 +432,8 @@ private:
         lambertVertexShaderCreateInfo.pCode = lambertVertexShaderCode.data();
         lambertVertexShaderCreateInfo.codeSize = lambertVertexShaderCodeSize;
         lambertVertexShaderCreateInfo.pName = "main";
-        std::array<VkDescriptorSetLayout, 3> lambertSetLayouts = m3DModel->getDescriptorSetLayouts();
+        std::vector<VkDescriptorSetLayout> lambertSetLayouts = m3DModel->getDescriptorSetLayouts();
+        lambertSetLayouts.push_back(mDirectionalLightDescriptorSetLayout);
         lambertVertexShaderCreateInfo.setLayoutCount = lambertSetLayouts.size();
         lambertVertexShaderCreateInfo.pSetLayouts = lambertSetLayouts.data();
         lambertVertexShaderCreateInfo.pushConstantRangeCount = 1;
@@ -434,7 +453,7 @@ private:
         lambertFragmentShaderCreateInfo.pCode = lambertFragmentShaderCode.data();
         lambertFragmentShaderCreateInfo.codeSize = lambertFragmentShaderCodeSize;
         lambertFragmentShaderCreateInfo.pName = "main";
-        lambertFragmentShaderCreateInfo.setLayoutCount = 3;
+        lambertFragmentShaderCreateInfo.setLayoutCount = lambertSetLayouts.size();
         lambertFragmentShaderCreateInfo.pSetLayouts = lambertSetLayouts.data();
         lambertFragmentShaderCreateInfo.pushConstantRangeCount = 1;
         lambertFragmentShaderCreateInfo.pPushConstantRanges = &pushConstantRange;
@@ -449,7 +468,8 @@ private:
     void createLambertGraphicsPipelineLayout(const VkDevice& logicalDevice) {
         VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
         pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-        std::array<VkDescriptorSetLayout, 3> lambertSetLayouts = m3DModel->getDescriptorSetLayouts();
+        std::vector<VkDescriptorSetLayout> lambertSetLayouts = m3DModel->getDescriptorSetLayouts();
+        lambertSetLayouts.push_back(mDirectionalLightDescriptorSetLayout);
         pipelineLayoutInfo.setLayoutCount = lambertSetLayouts.size();
         pipelineLayoutInfo.pSetLayouts = lambertSetLayouts.data();
         VkPushConstantRange pushConstantRange {};
@@ -468,6 +488,14 @@ private:
         m3DModel = new glTF3DModel(&mVulkanInstance);
     }
 
+    void loadLights() {
+        mDirectionalLight = new DirectionalLight();
+        mDirectionalLight->direction = glm::vec3(1.0f, -1.0f, 1.0f);
+        mDirectionalLight->ambient = glm::vec3(0.4f, 0.4f, 0.4f);
+        mDirectionalLight->diffuse = glm::vec3(1.0f, 1.0f, 1.0f);
+        mDirectionalLight->specular = glm::vec3(1.0f, 1.0f, 1.0f);
+    }
+
     void updateShadowMapDescriptorSets() {
         m3DModel->updateShadowMapDescriptorSets(MAX_FRAMES_IN_FLIGHT, mShadowMapImageViews, mShadowMapSampler);
     }
@@ -477,7 +505,7 @@ private:
         glm::mat4 view;
         glm::mat4 proj;
         glm::mat4 lightSpaceMatrix;
-        glm::vec3 lightPos;
+        glm::vec3 viewDir;
     };
 
     struct ShadowMapUniformBufferObject {
@@ -511,18 +539,31 @@ private:
 
             vkMapMemory(logicalDevice, mShadowMapUniformBuffersMemory[i], 0, bufferSize, 0, &mShadowMapUniformBuffersMapped[i]);
         }
+
+        bufferSize = sizeof(DirectionalLight);
+        mDirectionalLightUniformBuffers.resize(MAX_FRAMES_IN_FLIGHT);
+        mDirectionalLightUniformBuffersMemory.resize(MAX_FRAMES_IN_FLIGHT);
+        mDirectionalLightUniformBuffersMapped.resize(MAX_FRAMES_IN_FLIGHT);
+
+        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
+            mVulkanInstance.createBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, mDirectionalLightUniformBuffers[i],
+            mDirectionalLightUniformBuffersMemory[i]);
+
+            vkMapMemory(logicalDevice, mDirectionalLightUniformBuffersMemory[i], 0, bufferSize, 0, &mDirectionalLightUniformBuffersMapped[i]);
+        }
     }
 
     void createDescriptorPool(const VkDevice& logicalDevice) {
         VkDescriptorPoolSize poolSize {};
         poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        poolSize.descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+        poolSize.descriptorCount = static_cast<uint32_t>(2 * MAX_FRAMES_IN_FLIGHT);
 
         VkDescriptorPoolCreateInfo poolInfo{};
         poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
         poolInfo.poolSizeCount = 1;
         poolInfo.pPoolSizes = &poolSize;
-        poolInfo.maxSets = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+        poolInfo.maxSets = static_cast<uint32_t>(2 * MAX_FRAMES_IN_FLIGHT);
         if(vkCreateDescriptorPool(logicalDevice, &poolInfo, nullptr, &mDescriptorPool) != VK_SUCCESS) {
             throw std::runtime_error("failed to create descriptor pool!");
         }
@@ -557,6 +598,38 @@ private:
             ShadowMapDescriptorWrites[0].pTexelBufferView = nullptr;
             vkUpdateDescriptorSets(logicalDevice, static_cast<uint32_t>(ShadowMapDescriptorWrites.size()),
                 ShadowMapDescriptorWrites.data(), 0, nullptr);
+        }
+    }
+
+    void createDirectionalLightDescriptorSets(const VkDevice& logicalDevice) {
+        std::vector<VkDescriptorSetLayout> directionalLightLayouts(MAX_FRAMES_IN_FLIGHT, mDirectionalLightDescriptorSetLayout);
+        VkDescriptorSetAllocateInfo allocInfo{};
+        allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+        allocInfo.descriptorPool = mDescriptorPool;
+        allocInfo.descriptorSetCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+        allocInfo.pSetLayouts = directionalLightLayouts.data();
+        mDirectionalLightDescriptorSets.resize(MAX_FRAMES_IN_FLIGHT);
+        if(vkAllocateDescriptorSets(logicalDevice, &allocInfo, mDirectionalLightDescriptorSets.data()) != VK_SUCCESS) {
+            throw std::runtime_error("failed to allocate directional light descriptor sets!");
+        }
+
+        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+            VkDescriptorBufferInfo bufferInfo{};
+            bufferInfo.buffer = mDirectionalLightUniformBuffers[i];
+            bufferInfo.offset = 0;
+            bufferInfo.range = sizeof(DirectionalLight);
+            std::array<VkWriteDescriptorSet, 1> directionalLightDescriptorWrites{};
+            directionalLightDescriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            directionalLightDescriptorWrites[0].dstSet = mDirectionalLightDescriptorSets[i];
+            directionalLightDescriptorWrites[0].dstBinding = 0;
+            directionalLightDescriptorWrites[0].dstArrayElement = 0;
+            directionalLightDescriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+            directionalLightDescriptorWrites[0].descriptorCount = 1;
+            directionalLightDescriptorWrites[0].pBufferInfo = &bufferInfo;
+            directionalLightDescriptorWrites[0].pImageInfo = nullptr;
+            directionalLightDescriptorWrites[0].pTexelBufferView = nullptr;
+            vkUpdateDescriptorSets(logicalDevice, static_cast<uint32_t>(directionalLightDescriptorWrites.size()),
+                directionalLightDescriptorWrites.data(), 0, nullptr);
         }
     }
 
@@ -692,8 +765,11 @@ private:
         createShadowMapSampler(mVulkanInstance.getPhysicalDevice(), mVulkanInstance.getLogicalDevice());
         createDescriptorPool(mVulkanInstance.getLogicalDevice());
         loadObjects();
+        loadLights();
         createShadowMapDescriptorSetLayout(mVulkanInstance.getLogicalDevice());
         createShadowMapDescriptorSets(mVulkanInstance.getLogicalDevice());
+        createDirectionalLightDescriptorSetLayout(mVulkanInstance.getLogicalDevice());
+        createDirectionalLightDescriptorSets(mVulkanInstance.getLogicalDevice());
         createShadowMapShaderObjects(mVulkanInstance.getLogicalDevice());
         createShadowMapGraphicsPipelineLayout(mVulkanInstance.getLogicalDevice());
         createCommandBuffer(mVulkanInstance.getCommandPool(), mVulkanInstance.getLogicalDevice());
@@ -747,7 +823,7 @@ private:
         ubo.view = glm::lookAt(mCamera->getCameraPosition(), mCamera->getCameraLookAtPosition(), mCamera->getCameraUp());
         ubo.proj = glm::perspective(mCamera->getFovY(), mCamera->getAspect(), mCamera->getNear(), mCamera->getFar());
         ubo.proj[1][1] *= -1;
-        ubo.lightPos = glm::vec3(mLightPosX, mLightPosY, mLightPosZ);
+        ubo.viewDir = mCamera->getCameraViewDirection();
 
         float nearPlane = 0.1f;
         float farPlane = 25.0f;
@@ -764,6 +840,8 @@ private:
         shadowMapUBO.model = ubo.model;
         shadowMapUBO.lightSpaceMatrix = lightSpaceMatrix;
         memcpy(mShadowMapUniformBuffersMapped[currentImage], &shadowMapUBO, sizeof(shadowMapUBO));
+
+        memcpy(mDirectionalLightUniformBuffersMapped[currentImage], mDirectionalLight, sizeof(DirectionalLight));
     }
 
     void recordCommandBuffer(VkPhysicalDevice physicalDevice, VkCommandBuffer commandBuffer, uint32_t imageIndex, uint32_t currentFrameIndex)
@@ -837,8 +915,8 @@ private:
 		    vkCmdSetColorBlendEnableEXT(commandBuffer, 0, 1, &colorBlendEnables);
 		    vkCmdSetColorWriteMaskEXT(commandBuffer, 0, 1, &colorBlendComponentFlags);
             VkVertexInputBindingDescription2EXT vertexInputBinding = m3DModel->getBindingDescription2EXT();
-		    std::array<VkVertexInputAttributeDescription2EXT, 3> vertexAttributes = m3DModel->getAttributeDescriptions2EXT();
-            vkCmdSetVertexInputEXT(commandBuffer, 1, &vertexInputBinding, 3, vertexAttributes.data());
+		    std::array<VkVertexInputAttributeDescription2EXT, 4> vertexAttributes = m3DModel->getAttributeDescriptions2EXT();
+            vkCmdSetVertexInputEXT(commandBuffer, 1, &vertexInputBinding, 4, vertexAttributes.data());
             vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mShadowMapPipelineLayout, 0, 1, &mShadowMapDescriptorSets[currentFrameIndex], 0, nullptr);
             vkCmdBindShadersEXT(commandBuffer, 2, &shaderStageBits[0], &mShadowMapShaderObjects[0]);
             m3DModel->draw(commandBuffer, mShadowMapPipelineLayout, currentFrameIndex, nullptr, true);
@@ -899,11 +977,12 @@ private:
 		    vkCmdSetColorBlendEnableEXT(commandBuffer, 0, 1, &colorBlendEnables);
 		    vkCmdSetColorWriteMaskEXT(commandBuffer, 0, 1, &colorBlendComponentFlags);
             VkVertexInputBindingDescription2EXT vertexInputBinding = m3DModel->getBindingDescription2EXT();
-		    std::array<VkVertexInputAttributeDescription2EXT, 3> vertexAttributes = m3DModel->getAttributeDescriptions2EXT();
-		    vkCmdSetVertexInputEXT(commandBuffer, 1, &vertexInputBinding, 3, vertexAttributes.data());
+		    std::array<VkVertexInputAttributeDescription2EXT, 4> vertexAttributes = m3DModel->getAttributeDescriptions2EXT();
+		    vkCmdSetVertexInputEXT(commandBuffer, 1, &vertexInputBinding, 4, vertexAttributes.data());
             vkCmdBindShadersEXT(commandBuffer, 2, &shaderStageBits[0], &mLambertShaderObjects[0]);
             vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mLambertPipelineLayout, 0, 1, m3DModel->getUBODescriptorSet(currentFrameIndex), 0, nullptr);
             vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mLambertPipelineLayout, 1, 1, m3DModel->getShadowMapDescriptorSet(currentFrameIndex), 0, nullptr);
+            vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mLambertPipelineLayout, 3, 1, &mDirectionalLightDescriptorSets[currentFrameIndex], 0, nullptr);
             m3DModel->draw(commandBuffer, mLambertPipelineLayout, currentFrameIndex, &cameraFrustum, false);
         }
         vkCmdEndRendering(commandBuffer);
@@ -1166,6 +1245,7 @@ private:
             m3DModel->clearResource();
         }
         delete m3DModel;
+        delete mDirectionalLight;
         for (VkShaderEXT& shadowMapShaderObject : mShadowMapShaderObjects) {
             vkDestroyShaderEXT(logicalDevice, shadowMapShaderObject, nullptr);
         }
@@ -1181,10 +1261,13 @@ private:
             vkFreeMemory(logicalDevice, mUniformBuffersMemory[i], nullptr);
             vkDestroyBuffer(logicalDevice, mShadowMapUniformBuffers[i], nullptr);
             vkFreeMemory(logicalDevice, mShadowMapUniformBuffersMemory[i], nullptr);
+            vkDestroyBuffer(logicalDevice, mDirectionalLightUniformBuffers[i], nullptr);
+            vkFreeMemory(logicalDevice, mDirectionalLightUniformBuffersMemory[i], nullptr);
         }
 
         vkDestroyDescriptorPool(logicalDevice, mDescriptorPool, nullptr);
         vkDestroyDescriptorSetLayout(logicalDevice, mShadowMapDescriptorSetLayout, nullptr);
+        vkDestroyDescriptorSetLayout(logicalDevice, mDirectionalLightDescriptorSetLayout, nullptr);
         vkDestroyPipelineLayout(logicalDevice, mShadowMapPipelineLayout, nullptr);
         for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
         {
@@ -1211,6 +1294,7 @@ private:
     VkFormat mSwapChainImageFormat;
     VkExtent2D mSwapChainExtent;
     VkDescriptorSetLayout mShadowMapDescriptorSetLayout;
+    VkDescriptorSetLayout mDirectionalLightDescriptorSetLayout;
     VkPipelineLayout mShadowMapPipelineLayout;
     std::array<VkShaderEXT, 2> mShadowMapShaderObjects;
     //VkDescriptorSetLayout mLambertDescriptorSetLayout;
@@ -1236,8 +1320,12 @@ private:
     std::vector<VkBuffer> mShadowMapUniformBuffers;
     std::vector<VkDeviceMemory> mShadowMapUniformBuffersMemory;
     std::vector<void*> mShadowMapUniformBuffersMapped;
+    std::vector<VkBuffer> mDirectionalLightUniformBuffers;
+    std::vector<VkDeviceMemory> mDirectionalLightUniformBuffersMemory;
+    std::vector<void*> mDirectionalLightUniformBuffersMapped;
     VkDescriptorPool mDescriptorPool;
     std::vector<VkDescriptorSet> mShadowMapDescriptorSets;
+    std::vector<VkDescriptorSet> mDirectionalLightDescriptorSets;
     Camera* mCamera;
     float mCameraYaw = 0.0f;
     float mCameraYawPrev = 0.0f;
@@ -1249,6 +1337,7 @@ private:
     char mModelPathBuf[512] = "";
     std::string mSelectedModelPath;
     std::string mCurrentModelPath;
+    DirectionalLight* mDirectionalLight;
 
     // FPS tracking
     std::chrono::steady_clock::time_point mLastFrameTime = std::chrono::steady_clock::now();

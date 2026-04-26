@@ -18,6 +18,7 @@ public:
     glm::vec3 getCameraPosition() const;
     glm::vec3 getCameraUp() const;
     glm::vec3 getCameraLookAtPosition() const;
+    glm::vec3 getCameraViewDirection() const;
     float getFovY() const;
     float getAspect() const;
     float getNear() const;

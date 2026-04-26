@@ -4,7 +4,7 @@
 Camera::Camera(const float swapchainExtentWidth, const float swapchainExtentHeight) : mFovY(glm::radians(45.0f)),
                     mAspect(swapchainExtentWidth / swapchainExtentHeight),
                     mNear(0.01f),
-                    mFar(10.0f),
+                    mFar(50.0f),
                     mPosition(glm::vec3(0.0f, 0.03f, -0.15f)),
                     mUp(glm::vec3(0.0f, 1.0f, 0.0f)),
                     mForward(glm::vec3(0.0f, 0.0f, 1.0f))
@@ -20,6 +20,10 @@ glm::vec3 Camera::getCameraUp() const {
 
 glm::vec3 Camera::getCameraLookAtPosition() const {
     return mPosition + mForward;
+}
+
+glm::vec3 Camera::getCameraViewDirection() const {
+    return -mForward;
 }
 
 float Camera::getFovY() const {

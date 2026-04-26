@@ -13,7 +13,7 @@ glTF3DModel::glTF3DModel(VulkanInstance* vulkanInstance) : mVulkanInstance(vulka
     mDescriptorPool = VK_NULL_HANDLE;
     mUBODescriptorSetLayout = VK_NULL_HANDLE;
     mShadowMapDescriptorSetLayout = VK_NULL_HANDLE;
-    mTextureDescriptorSetLayout = VK_NULL_HANDLE;
+    mMaterialDescriptorSetLayout = VK_NULL_HANDLE;
 
 }
 
@@ -30,7 +30,7 @@ void glTF3DModel::clearResource() {
     }
     vkDestroyDescriptorSetLayout(mVulkanInstance->getLogicalDevice(), mUBODescriptorSetLayout, nullptr);
     vkDestroyDescriptorSetLayout(mVulkanInstance->getLogicalDevice(), mShadowMapDescriptorSetLayout, nullptr);
-    vkDestroyDescriptorSetLayout(mVulkanInstance->getLogicalDevice(), mTextureDescriptorSetLayout, nullptr);
+    vkDestroyDescriptorSetLayout(mVulkanInstance->getLogicalDevice(), mMaterialDescriptorSetLayout, nullptr);
     vkDestroyDescriptorPool(mVulkanInstance->getLogicalDevice(), mDescriptorPool, nullptr);
 
     mVertexBufferData.clear();
@@ -122,16 +122,10 @@ void glTF3DModel::loadMaterials(tinygltf::Model* glTFInput) {
     for (size_t i = 0; i < glTFInput->materials.size(); ++i) {
         const tinygltf::Material& glTFMaterial = glTFInput->materials[i];
         Material material = {};
-        if (glTFMaterial.values.find("baseColorFactor") != glTFMaterial.values.end()) {
-            material.baseColorFactor = glm::make_vec4(glTFMaterial.values.at("baseColorFactor").ColorFactor().data());
-        } else {
-            material.baseColorFactor = glm::vec4(1.0f);
-        }
-        if (glTFMaterial.values.find("baseColorTexture") != glTFMaterial.values.end()) {
-            material.baseColorTextureIndex = glTFMaterial.values.at("baseColorTexture").TextureIndex();
-        } else {
-            material.baseColorTextureIndex = -1;
-        }
+        material.baseColorTextureIndex = glTFMaterial.pbrMetallicRoughness.baseColorTexture.index;
+        material.metallicRoughnessTextureIndex = glTFMaterial.pbrMetallicRoughness.metallicRoughnessTexture.index;
+        material.normalTextureIndex = glTFMaterial.normalTexture.index;
+
         mMaterials[i] = material;
     }
 }
@@ -188,6 +182,7 @@ void glTF3DModel::loadNode(const tinygltf::Node* gltfNode, const tinygltf::Model
             const float* positionBuffer = nullptr;
             const float* normalBuffer = nullptr;
             const float* texcoordBuffer = nullptr;
+            const float* tangentBuffer = nullptr;
 
             size_t vertexCount = 0;
 
@@ -223,6 +218,13 @@ void glTF3DModel::loadNode(const tinygltf::Node* gltfNode, const tinygltf::Model
                 texcoordBuffer = reinterpret_cast<const float*>(texcoordBufferData.data.data() + texcoordAccessor.byteOffset + texcoordBufferView.byteOffset);
             }
 
+            if (primitive.attributes.find("TANGENT") != primitive.attributes.end()) {
+                const tinygltf::Accessor& tangentAccessor = glTFInput->accessors[primitive.attributes.at("TANGENT")];
+                const tinygltf::BufferView& tangentBufferView = glTFInput->bufferViews[tangentAccessor.bufferView];
+                const tinygltf::Buffer& tangentBufferData = glTFInput->buffers[tangentBufferView.buffer];
+                tangentBuffer = reinterpret_cast<const float*>(tangentBufferData.data.data() + tangentAccessor.byteOffset + tangentBufferView.byteOffset);
+            }
+
             for (size_t vertexIndex = 0; vertexIndex < vertexCount; ++vertexIndex) {
                 Vertex vertex = {};
                 vertex.pos = glm::vec3(positionBuffer[vertexIndex * 3], positionBuffer[vertexIndex * 3 + 1], positionBuffer[vertexIndex * 3 + 2]);
@@ -231,6 +233,9 @@ void glTF3DModel::loadNode(const tinygltf::Node* gltfNode, const tinygltf::Model
                 }
                 if (texcoordBuffer != nullptr) {
                     vertex.uv = glm::vec2(texcoordBuffer[vertexIndex * 2], texcoordBuffer[vertexIndex * 2 + 1]);
+                }
+                if (tangentBuffer != nullptr) {
+                    vertex.tangent = glm::vec4(tangentBuffer[vertexIndex * 4], tangentBuffer[vertexIndex * 4 + 1], tangentBuffer[vertexIndex * 4 + 2], tangentBuffer[vertexIndex * 4 + 3]);
                 }
                 vertexBuffer.push_back(vertex);
             }
@@ -290,7 +295,7 @@ VkVertexInputBindingDescription2EXT glTF3DModel::getBindingDescription2EXT() {
     return Vertex::getBindingDescription2EXT();
 }
 
-std::array<VkVertexInputAttributeDescription2EXT, 3> glTF3DModel::getAttributeDescriptions2EXT() {
+std::array<VkVertexInputAttributeDescription2EXT, 4> glTF3DModel::getAttributeDescriptions2EXT() {
     return Vertex::getAttributeDescriptions2EXT();
 }
 
@@ -443,42 +448,70 @@ void glTF3DModel::setupDescriptors(const uint8_t framesInFlightCount,
         vkUpdateDescriptorSets(mVulkanInstance->getLogicalDevice(), 1, &shadowMapDescriptorWrite, 0, nullptr);
     }
 
-    VkDescriptorSetLayoutBinding textureDescriptorSetLayoutBinding{};
-    textureDescriptorSetLayoutBinding.binding = 0;
-    textureDescriptorSetLayoutBinding.descriptorCount = 1;
-    textureDescriptorSetLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    textureDescriptorSetLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-    textureDescriptorSetLayoutBinding.pImmutableSamplers = nullptr;
+    std::array<VkDescriptorSetLayoutBinding, 3> materialBinding{};
+    materialBinding[0].binding = 0;
+    materialBinding[0].descriptorCount = 1;
+    materialBinding[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    materialBinding[0].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+    materialBinding[0].pImmutableSamplers = nullptr;
+    materialBinding[1].binding = 1;
+    materialBinding[1].descriptorCount = 1;
+    materialBinding[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    materialBinding[1].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+    materialBinding[1].pImmutableSamplers = nullptr;
+    materialBinding[2].binding = 2;
+    materialBinding[2].descriptorCount = 1;
+    materialBinding[2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    materialBinding[2].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+    materialBinding[2].pImmutableSamplers = nullptr;
 
-    VkDescriptorSetLayoutCreateInfo textureLayoutInfo{};
-    textureLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    textureLayoutInfo.bindingCount = 1;
-    textureLayoutInfo.pBindings = &textureDescriptorSetLayoutBinding;
-    if (vkCreateDescriptorSetLayout(mVulkanInstance->getLogicalDevice(), &textureLayoutInfo, nullptr, &mTextureDescriptorSetLayout) != VK_SUCCESS) {
+    VkDescriptorSetLayoutCreateInfo materialDescriptorSetLayoutInfo{};
+    materialDescriptorSetLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    materialDescriptorSetLayoutInfo.bindingCount = 3;
+    materialDescriptorSetLayoutInfo.pBindings = materialBinding.data();
+    if (vkCreateDescriptorSetLayout(mVulkanInstance->getLogicalDevice(), &materialDescriptorSetLayoutInfo, nullptr, &mMaterialDescriptorSetLayout) != VK_SUCCESS) {
         throw std::runtime_error("failed to create descriptor set layout!");
     }
 
-    VkDescriptorSetAllocateInfo textureAllocInfo {};
-    textureAllocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-    textureAllocInfo.descriptorPool = mDescriptorPool;
-    textureAllocInfo.descriptorSetCount = framesInFlightCount;
-    std::vector<VkDescriptorSetLayout> textureDescriptorSetLayouts(framesInFlightCount, mTextureDescriptorSetLayout);
-    textureAllocInfo.pSetLayouts = textureDescriptorSetLayouts.data();
-    for (Image& image : mImages) {
-        image.descriptorSet.resize(framesInFlightCount);
-        if(vkAllocateDescriptorSets(mVulkanInstance->getLogicalDevice(), &textureAllocInfo, image.descriptorSet.data()) != VK_SUCCESS) {
+    VkDescriptorSetAllocateInfo materialDescriptorSetAllocInfo {};
+    materialDescriptorSetAllocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    materialDescriptorSetAllocInfo.descriptorPool = mDescriptorPool;
+    materialDescriptorSetAllocInfo.descriptorSetCount = framesInFlightCount;
+    std::vector<VkDescriptorSetLayout> materialDescriptorSetLayouts(framesInFlightCount, mMaterialDescriptorSetLayout);
+    materialDescriptorSetAllocInfo.pSetLayouts = materialDescriptorSetLayouts.data();
+    for (Material& material: mMaterials) {
+        material.descriptorSets.resize(framesInFlightCount);
+        if(vkAllocateDescriptorSets(mVulkanInstance->getLogicalDevice(), &materialDescriptorSetAllocInfo, material.descriptorSets.data()) != VK_SUCCESS) {
             throw std::runtime_error("failed to allocate descriptor set!");
         }
+
         for (size_t i = 0; i < framesInFlightCount; ++i) {
-            VkWriteDescriptorSet textureDescriptorWrite{};
-            textureDescriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            textureDescriptorWrite.dstSet = image.descriptorSet[i];
-            textureDescriptorWrite.dstBinding = 0;
-            textureDescriptorWrite.dstArrayElement = 0;
-            textureDescriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-            textureDescriptorWrite.descriptorCount = 1;
-            textureDescriptorWrite.pImageInfo = &image.textureData.descriptorInfo;
-            vkUpdateDescriptorSets(mVulkanInstance->getLogicalDevice(), 1, &textureDescriptorWrite, 0, nullptr);
+            std::array<VkWriteDescriptorSet, 3> materialDescriptorWrites{};
+            materialDescriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            materialDescriptorWrites[0].pNext = nullptr;
+            materialDescriptorWrites[0].dstSet = material.descriptorSets[i];
+            materialDescriptorWrites[0].dstBinding = 0;
+            materialDescriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            materialDescriptorWrites[0].descriptorCount = 1;
+            materialDescriptorWrites[0].pImageInfo = &mImages[mTextures[material.baseColorTextureIndex].imageIndex].textureData.descriptorInfo;
+
+            materialDescriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            materialDescriptorWrites[1].pNext = nullptr;
+            materialDescriptorWrites[1].dstSet = material.descriptorSets[i];
+            materialDescriptorWrites[1].dstBinding = 1;
+            materialDescriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            materialDescriptorWrites[1].descriptorCount = 1;
+            materialDescriptorWrites[1].pImageInfo = &mImages[mTextures[material.metallicRoughnessTextureIndex].imageIndex].textureData.descriptorInfo;
+
+            materialDescriptorWrites[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            materialDescriptorWrites[2].pNext = nullptr;
+            materialDescriptorWrites[2].dstSet = material.descriptorSets[i];
+            materialDescriptorWrites[2].dstBinding = 2;
+            materialDescriptorWrites[2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            materialDescriptorWrites[2].descriptorCount = 1;
+            materialDescriptorWrites[2].pImageInfo = &mImages[mTextures[material.normalTextureIndex].imageIndex].textureData.descriptorInfo;
+
+            vkUpdateDescriptorSets(mVulkanInstance->getLogicalDevice(), 3, materialDescriptorWrites.data(), 0, nullptr);
         }
     }
 }
@@ -514,9 +547,9 @@ const VkDescriptorSet* glTF3DModel::getShadowMapDescriptorSet(const uint8_t fram
     return &mShadowMapDescriptorSet[framesInFlightIndex];
 }
 
-std::array<VkDescriptorSetLayout, 3> glTF3DModel::getDescriptorSetLayouts()
+std::vector<VkDescriptorSetLayout> glTF3DModel::getDescriptorSetLayouts()
 {
-    return {mUBODescriptorSetLayout, mShadowMapDescriptorSetLayout, mTextureDescriptorSetLayout};
+    return {mUBODescriptorSetLayout, mShadowMapDescriptorSetLayout, mMaterialDescriptorSetLayout};
 }
 
 // Draw a single node including child nodes (if present)
@@ -548,11 +581,8 @@ void glTF3DModel::drawNode(VkCommandBuffer commandBuffer, VkPipelineLayout pipel
             }
 
             if (primitive.indexCount > 0 && !isFrustumCulled) {
-                // Get the texture index for this primitive
-                if (mMaterials[primitive.materialIndex].baseColorTextureIndex >= 0 && !isShadowMapPass) {
-                    Texture texture = mTextures[mMaterials[primitive.materialIndex].baseColorTextureIndex];
-                    // Bind the descriptor for the current primitive's texture
-                    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 2, 1, &mImages[texture.imageIndex].descriptorSet[framesInFlightIndex], 0, nullptr);
+                if (!isShadowMapPass) {
+                    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 2, 1, &mMaterials[primitive.materialIndex].descriptorSets[framesInFlightIndex], 0, nullptr);
                 }
                 vkCmdDrawIndexed(commandBuffer, primitive.indexCount, 1, primitive.firstIndex, 0, 0);
                 ++mPrimitiveCount;

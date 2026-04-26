@@ -14,7 +14,7 @@ public:
     void initialize(const std::string& filePath);
     bool isInitialized() const { return mInitialized; }
     VkVertexInputBindingDescription2EXT getBindingDescription2EXT();
-    std::array<VkVertexInputAttributeDescription2EXT, 3> getAttributeDescriptions2EXT();
+    std::array<VkVertexInputAttributeDescription2EXT, 4> getAttributeDescriptions2EXT();
     void createVertexBuffer();
     void createIndexBuffer();
     void setupDescriptors(const uint8_t framesInFlightCount,
@@ -29,7 +29,7 @@ public:
         const std::vector<VkImageView>& shadowMapImageViews,
         const VkSampler& shadowMapSampler);
     
-    std::array<VkDescriptorSetLayout, 3> getDescriptorSetLayouts();
+    std::vector<VkDescriptorSetLayout> getDescriptorSetLayouts();
     
     void clearResource();
 
@@ -43,6 +43,7 @@ private:
         glm::vec3 pos;
         glm::vec3 normal;
         glm::vec2 uv;
+        glm::vec4 tangent;
 
         static VkVertexInputBindingDescription2EXT getBindingDescription2EXT() {
             VkVertexInputBindingDescription2EXT bindingDescription2{};
@@ -54,8 +55,8 @@ private:
             return bindingDescription2;
         }
 
-        static std::array<VkVertexInputAttributeDescription2EXT, 3> getAttributeDescriptions2EXT() {
-            std::array<VkVertexInputAttributeDescription2EXT, 3> attributeDescriptions{};
+        static std::array<VkVertexInputAttributeDescription2EXT, 4> getAttributeDescriptions2EXT() {
+            std::array<VkVertexInputAttributeDescription2EXT, 4> attributeDescriptions{};
             attributeDescriptions[0].sType = VK_STRUCTURE_TYPE_VERTEX_INPUT_ATTRIBUTE_DESCRIPTION_2_EXT;
             attributeDescriptions[0].pNext = nullptr;
             attributeDescriptions[0].binding = 0;
@@ -74,6 +75,12 @@ private:
             attributeDescriptions[2].location = 2;
             attributeDescriptions[2].format = VK_FORMAT_R32G32_SFLOAT;
             attributeDescriptions[2].offset = offsetof(Vertex, uv);
+            attributeDescriptions[3].sType = VK_STRUCTURE_TYPE_VERTEX_INPUT_ATTRIBUTE_DESCRIPTION_2_EXT;
+            attributeDescriptions[3].pNext = nullptr;
+            attributeDescriptions[3].binding = 0;
+            attributeDescriptions[3].location = 3;
+            attributeDescriptions[3].format = VK_FORMAT_R32G32B32A32_SFLOAT;
+            attributeDescriptions[3].offset = offsetof(Vertex, tangent);
             return attributeDescriptions;
         }
     };
@@ -116,8 +123,10 @@ private:
     };
 
     struct Material {
-        glm::vec4 baseColorFactor;
         int32_t baseColorTextureIndex;
+        int32_t metallicRoughnessTextureIndex;
+        int32_t normalTextureIndex;
+        std::vector<VkDescriptorSet> descriptorSets;
     };
 
     struct TextureGPUData {
@@ -220,7 +229,6 @@ private:
 
     struct Image {
         TextureGPUData textureData;
-        std::vector<VkDescriptorSet> descriptorSet;
     };
 
     struct Texture {
@@ -239,7 +247,7 @@ private:
     VkDescriptorPool mDescriptorPool;
     VkDescriptorSetLayout mUBODescriptorSetLayout;
     VkDescriptorSetLayout mShadowMapDescriptorSetLayout;
-    VkDescriptorSetLayout mTextureDescriptorSetLayout;
+    VkDescriptorSetLayout mMaterialDescriptorSetLayout;
     std::vector<VkDescriptorSet> mUBODescriptorSet;
     std::vector<VkDescriptorSet> mShadowMapDescriptorSet;
     bool mInitialized;
