@@ -55,6 +55,8 @@ const bool enableValidationLayers = false;
 const bool enableValidationLayers = true;
 #endif
 
+#define MAX_POINT_LIGHTS 16
+
 struct SwapChainSupportDetails
 {
     VkSurfaceCapabilitiesKHR capabilities;
@@ -348,6 +350,23 @@ private:
         }
     }
 
+    void createPointLightsDescriptorSetLayout(const VkDevice& logicalDevice) {
+        VkDescriptorSetLayoutBinding pointLightUboLayoutBinding{};
+        pointLightUboLayoutBinding.binding = 0;
+        pointLightUboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        pointLightUboLayoutBinding.descriptorCount = 1;
+        pointLightUboLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+        pointLightUboLayoutBinding.pImmutableSamplers = nullptr;
+        std::array<VkDescriptorSetLayoutBinding, 1> pointLightBindings = {pointLightUboLayoutBinding};
+        VkDescriptorSetLayoutCreateInfo layoutInfo{};
+        layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+        layoutInfo.bindingCount = static_cast<uint32_t> (pointLightBindings.size());
+        layoutInfo.pBindings = pointLightBindings.data();
+        if(vkCreateDescriptorSetLayout(logicalDevice, &layoutInfo, nullptr, &mPointLightDescriptorSetLayout) != VK_SUCCESS) {
+            throw std::runtime_error("failed to create point light descriptor set layout!");
+        }
+    }
+
     void createShadowMapGraphicsPipelineLayout(const VkDevice& logicalDevice) {
         VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
         pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
@@ -434,6 +453,7 @@ private:
         lambertVertexShaderCreateInfo.pName = "main";
         std::vector<VkDescriptorSetLayout> lambertSetLayouts = m3DModel->getDescriptorSetLayouts();
         lambertSetLayouts.push_back(mDirectionalLightDescriptorSetLayout);
+        lambertSetLayouts.push_back(mPointLightDescriptorSetLayout);
         lambertVertexShaderCreateInfo.setLayoutCount = lambertSetLayouts.size();
         lambertVertexShaderCreateInfo.pSetLayouts = lambertSetLayouts.data();
         lambertVertexShaderCreateInfo.pushConstantRangeCount = 1;
@@ -470,6 +490,7 @@ private:
         pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
         std::vector<VkDescriptorSetLayout> lambertSetLayouts = m3DModel->getDescriptorSetLayouts();
         lambertSetLayouts.push_back(mDirectionalLightDescriptorSetLayout);
+        lambertSetLayouts.push_back(mPointLightDescriptorSetLayout);
         pipelineLayoutInfo.setLayoutCount = lambertSetLayouts.size();
         pipelineLayoutInfo.pSetLayouts = lambertSetLayouts.data();
         VkPushConstantRange pushConstantRange {};
@@ -494,6 +515,26 @@ private:
         mDirectionalLight->ambient = glm::vec3(0.4f, 0.4f, 0.4f);
         mDirectionalLight->diffuse = glm::vec3(1.0f, 1.0f, 1.0f);
         mDirectionalLight->specular = glm::vec3(1.0f, 1.0f, 1.0f);
+
+        for (uint16_t pointLightIndex = 0; pointLightIndex < 16; ++pointLightIndex) {
+            mPointLights[pointLightIndex].position = glm::vec3(0.0f + pointLightIndex * 0.1f, 1.0f, 1.0f);
+            mPointLights[pointLightIndex].constant = 1.0f;
+            mPointLights[pointLightIndex].linear = 0.2f;
+            mPointLights[pointLightIndex].quadratic = 0.032f;
+            if (pointLightIndex % 3 == 0) {
+                mPointLights[pointLightIndex].ambient = glm::vec3(0.0f, 0.0f, 1.0f);
+                mPointLights[pointLightIndex].diffuse = glm::vec3(0.0f, 0.0f, 1.0f);
+                mPointLights[pointLightIndex].specular = glm::vec3(0.0f, 0.0f, 1.0f);
+            } else if (pointLightIndex % 3 == 1) {
+                mPointLights[pointLightIndex].ambient = glm::vec3(0.0f, 1.0f, 0.0f);
+                mPointLights[pointLightIndex].diffuse = glm::vec3(0.0f, 1.0f, 0.0f);
+                mPointLights[pointLightIndex].specular = glm::vec3(0.0f, 1.0f, 0.0f);
+            } else {
+                mPointLights[pointLightIndex].ambient = glm::vec3(1.0f, 0.0f, 0.0f);
+                mPointLights[pointLightIndex].diffuse = glm::vec3(1.0f, 0.0f, 0.0f);
+                mPointLights[pointLightIndex].specular = glm::vec3(1.0f, 0.0f, 0.0f);
+            }
+        }
     }
 
     void updateShadowMapDescriptorSets() {
@@ -552,18 +593,32 @@ private:
 
             vkMapMemory(logicalDevice, mDirectionalLightUniformBuffersMemory[i], 0, bufferSize, 0, &mDirectionalLightUniformBuffersMapped[i]);
         }
+
+        bufferSize = sizeof(PointLightData) * MAX_POINT_LIGHTS;
+        mPointLightUniformBuffers.resize(MAX_FRAMES_IN_FLIGHT);
+        mPointLightUniformBuffersMemory.resize(MAX_FRAMES_IN_FLIGHT);
+        mPointLightUniformBuffersMapped.resize(MAX_FRAMES_IN_FLIGHT);
+
+        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
+            mVulkanInstance.createBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, mPointLightUniformBuffers[i],
+            mPointLightUniformBuffersMemory[i]);
+
+            vkMapMemory(logicalDevice, mPointLightUniformBuffersMemory[i], 0, bufferSize, 0, &mPointLightUniformBuffersMapped[i]);
+        }
     }
 
     void createDescriptorPool(const VkDevice& logicalDevice) {
         VkDescriptorPoolSize poolSize {};
         poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        poolSize.descriptorCount = static_cast<uint32_t>(2 * MAX_FRAMES_IN_FLIGHT);
+        // 1 for shadow map, 1 for directional light, 1 for point lights
+        poolSize.descriptorCount = static_cast<uint32_t>(1 + 1 + 1) * MAX_FRAMES_IN_FLIGHT;
 
         VkDescriptorPoolCreateInfo poolInfo{};
         poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
         poolInfo.poolSizeCount = 1;
         poolInfo.pPoolSizes = &poolSize;
-        poolInfo.maxSets = static_cast<uint32_t>(2 * MAX_FRAMES_IN_FLIGHT);
+        poolInfo.maxSets = static_cast<uint32_t>(3 * MAX_FRAMES_IN_FLIGHT);
         if(vkCreateDescriptorPool(logicalDevice, &poolInfo, nullptr, &mDescriptorPool) != VK_SUCCESS) {
             throw std::runtime_error("failed to create descriptor pool!");
         }
@@ -630,6 +685,39 @@ private:
             directionalLightDescriptorWrites[0].pTexelBufferView = nullptr;
             vkUpdateDescriptorSets(logicalDevice, static_cast<uint32_t>(directionalLightDescriptorWrites.size()),
                 directionalLightDescriptorWrites.data(), 0, nullptr);
+        }
+    }
+
+    void createPointLightsDescriptorSets(const VkDevice& logicalDevice) {
+        std::vector<VkDescriptorSetLayout> pointLightLayouts(MAX_FRAMES_IN_FLIGHT, mPointLightDescriptorSetLayout);
+        VkDescriptorSetAllocateInfo allocInfo{};
+        allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+        allocInfo.descriptorPool = mDescriptorPool;
+        allocInfo.descriptorSetCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+        allocInfo.pSetLayouts = pointLightLayouts.data();
+        mPointLightDescriptorSets.resize(MAX_FRAMES_IN_FLIGHT);
+        if(vkAllocateDescriptorSets(logicalDevice, &allocInfo, mPointLightDescriptorSets.data()) != VK_SUCCESS) {
+            throw std::runtime_error("failed to allocate point light descriptor sets!");
+        }
+
+        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+            VkDescriptorBufferInfo bufferInfo{};
+            bufferInfo.buffer = mPointLightUniformBuffers[i];
+            bufferInfo.offset = 0;
+            bufferInfo.range = sizeof(PointLightData) * MAX_POINT_LIGHTS;
+
+            std::array<VkWriteDescriptorSet, 1> pointLightDescriptorWrites{};
+            pointLightDescriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            pointLightDescriptorWrites[0].dstSet = mPointLightDescriptorSets[i];
+            pointLightDescriptorWrites[0].dstBinding = 0;
+            pointLightDescriptorWrites[0].dstArrayElement = 0;
+            pointLightDescriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+            pointLightDescriptorWrites[0].descriptorCount = 1;
+            pointLightDescriptorWrites[0].pBufferInfo = &bufferInfo;
+            pointLightDescriptorWrites[0].pImageInfo = nullptr;
+            pointLightDescriptorWrites[0].pTexelBufferView = nullptr;
+            vkUpdateDescriptorSets(logicalDevice, static_cast<uint32_t>(pointLightDescriptorWrites.size()),
+                pointLightDescriptorWrites.data(), 0, nullptr);
         }
     }
 
@@ -770,6 +858,8 @@ private:
         createShadowMapDescriptorSets(mVulkanInstance.getLogicalDevice());
         createDirectionalLightDescriptorSetLayout(mVulkanInstance.getLogicalDevice());
         createDirectionalLightDescriptorSets(mVulkanInstance.getLogicalDevice());
+        createPointLightsDescriptorSetLayout(mVulkanInstance.getLogicalDevice());
+        createPointLightsDescriptorSets(mVulkanInstance.getLogicalDevice());
         createShadowMapShaderObjects(mVulkanInstance.getLogicalDevice());
         createShadowMapGraphicsPipelineLayout(mVulkanInstance.getLogicalDevice());
         createCommandBuffer(mVulkanInstance.getCommandPool(), mVulkanInstance.getLogicalDevice());
@@ -841,7 +931,13 @@ private:
         shadowMapUBO.lightSpaceMatrix = lightSpaceMatrix;
         memcpy(mShadowMapUniformBuffersMapped[currentImage], &shadowMapUBO, sizeof(shadowMapUBO));
 
+        for (uint16_t pointLightIndex = 0; pointLightIndex < MAX_POINT_LIGHTS; ++pointLightIndex) {
+            float phase = static_cast<float>(pointLightIndex) * (2.0f * glm::pi<float>() / MAX_POINT_LIGHTS);
+            mPointLights[pointLightIndex].position.x = 5.0f * glm::sin(time + phase);
+        }
+
         memcpy(mDirectionalLightUniformBuffersMapped[currentImage], mDirectionalLight, sizeof(DirectionalLight));
+        memcpy(mPointLightUniformBuffersMapped[currentImage], mPointLights, sizeof(PointLightData) * MAX_POINT_LIGHTS);
     }
 
     void recordCommandBuffer(VkPhysicalDevice physicalDevice, VkCommandBuffer commandBuffer, uint32_t imageIndex, uint32_t currentFrameIndex)
@@ -983,6 +1079,7 @@ private:
             vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mLambertPipelineLayout, 0, 1, m3DModel->getUBODescriptorSet(currentFrameIndex), 0, nullptr);
             vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mLambertPipelineLayout, 1, 1, m3DModel->getShadowMapDescriptorSet(currentFrameIndex), 0, nullptr);
             vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mLambertPipelineLayout, 3, 1, &mDirectionalLightDescriptorSets[currentFrameIndex], 0, nullptr);
+            vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mLambertPipelineLayout, 4, 1, &mPointLightDescriptorSets[currentFrameIndex], 0, nullptr);
             m3DModel->draw(commandBuffer, mLambertPipelineLayout, currentFrameIndex, &cameraFrustum, false);
         }
         vkCmdEndRendering(commandBuffer);
@@ -1263,11 +1360,14 @@ private:
             vkFreeMemory(logicalDevice, mShadowMapUniformBuffersMemory[i], nullptr);
             vkDestroyBuffer(logicalDevice, mDirectionalLightUniformBuffers[i], nullptr);
             vkFreeMemory(logicalDevice, mDirectionalLightUniformBuffersMemory[i], nullptr);
+            vkDestroyBuffer(logicalDevice, mPointLightUniformBuffers[i], nullptr);
+            vkFreeMemory(logicalDevice, mPointLightUniformBuffersMemory[i], nullptr);
         }
 
         vkDestroyDescriptorPool(logicalDevice, mDescriptorPool, nullptr);
         vkDestroyDescriptorSetLayout(logicalDevice, mShadowMapDescriptorSetLayout, nullptr);
         vkDestroyDescriptorSetLayout(logicalDevice, mDirectionalLightDescriptorSetLayout, nullptr);
+        vkDestroyDescriptorSetLayout(logicalDevice, mPointLightDescriptorSetLayout, nullptr);
         vkDestroyPipelineLayout(logicalDevice, mShadowMapPipelineLayout, nullptr);
         for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
         {
@@ -1295,9 +1395,9 @@ private:
     VkExtent2D mSwapChainExtent;
     VkDescriptorSetLayout mShadowMapDescriptorSetLayout;
     VkDescriptorSetLayout mDirectionalLightDescriptorSetLayout;
+    VkDescriptorSetLayout mPointLightDescriptorSetLayout;
     VkPipelineLayout mShadowMapPipelineLayout;
     std::array<VkShaderEXT, 2> mShadowMapShaderObjects;
-    //VkDescriptorSetLayout mLambertDescriptorSetLayout;
     std::array<VkShaderEXT, 2> mLambertShaderObjects;
     VkPipelineLayout mLambertPipelineLayout;
     std::vector<VkCommandBuffer> mCommandBuffers;
@@ -1307,7 +1407,6 @@ private:
     uint32_t mCurrentFrame = 0;
     bool framebufferResized = false;
     glTF3DModel* m3DModel;
-    //std::vector<Object*> objects;
     VkImage mDepthImage;
     VkDeviceMemory mDepthImageMemory;
     VkImageView mDepthImageView;
@@ -1323,9 +1422,13 @@ private:
     std::vector<VkBuffer> mDirectionalLightUniformBuffers;
     std::vector<VkDeviceMemory> mDirectionalLightUniformBuffersMemory;
     std::vector<void*> mDirectionalLightUniformBuffersMapped;
+    std::vector<VkBuffer> mPointLightUniformBuffers;
+    std::vector<VkDeviceMemory> mPointLightUniformBuffersMemory;
+    std::vector<void*> mPointLightUniformBuffersMapped;
     VkDescriptorPool mDescriptorPool;
     std::vector<VkDescriptorSet> mShadowMapDescriptorSets;
     std::vector<VkDescriptorSet> mDirectionalLightDescriptorSets;
+    std::vector<VkDescriptorSet> mPointLightDescriptorSets;
     Camera* mCamera;
     float mCameraYaw = 0.0f;
     float mCameraYawPrev = 0.0f;
@@ -1338,6 +1441,7 @@ private:
     std::string mSelectedModelPath;
     std::string mCurrentModelPath;
     DirectionalLight* mDirectionalLight;
+    PointLightData mPointLights[MAX_POINT_LIGHTS];
 
     // FPS tracking
     std::chrono::steady_clock::time_point mLastFrameTime = std::chrono::steady_clock::now();

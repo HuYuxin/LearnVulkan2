@@ -13,7 +13,7 @@ layout(location = 1) in vec3 inNormal;
 layout(location = 2) in vec2 inTexCoord;
 layout(location = 3) in vec4 inTangent;
 
-layout(location = 0) out vec3 fragPosition;
+layout(location = 0) out vec3 fragPositionWorldSpace;
 layout(location = 1) out vec2 fragTexCoord;
 layout(location = 2) out mat3 fragTBN;
 layout(location = 5) out vec4 fragPositionLightSpace;
@@ -34,7 +34,7 @@ void main() {
 
     gl_Position = ubo.proj * ubo.view * modelMatrix * vec4(inPosition, 1.0);
     vec4 modelPosWorldSpace = modelMatrix * vec4(inPosition, 1.0);
-    fragPosition = vec3(modelPosWorldSpace.x/modelPosWorldSpace.w, modelPosWorldSpace.y/modelPosWorldSpace.w, modelPosWorldSpace.z/modelPosWorldSpace.w);
+    fragPositionWorldSpace = vec3(modelPosWorldSpace.x/modelPosWorldSpace.w, modelPosWorldSpace.y/modelPosWorldSpace.w, modelPosWorldSpace.z/modelPosWorldSpace.w);
     fragTexCoord = inTexCoord;
     fragPositionLightSpace = ubo.lightSpaceMatrix * modelMatrix * vec4(inPosition, 1.0);
 }
